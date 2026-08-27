@@ -1,0 +1,139 @@
+// Prisma Schema for GEM POS System
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Foydalanuvchilar (Admin va Kassir)
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  login     String   @unique
+  password  String   // bcrypt hash
+  role      Role     @default(CASHIER)
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  sales     Sale[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  CASHIER
+}
+
+// Filiallar (Do'konlar)
+model Branch {
+  id        String     @id @default(cuid())
+  name      String
+  address   String?
+  users     User[]
+  products  Product[]
+  sales     Sale[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("branches")
+}
+
+// Kategoriyalar
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("categories")
+}
+
+// Taminotchilar (Distribyutorlar)
+model Supplier {
+  id            String    @id @default(cuid())
+  name          String
+  contactPerson String
+  phone         String
+  products      Product[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("suppliers")
+}
+
+// Mahsulotlar
+model Product {
+  id             String      @id @default(cuid())
+  name           String
+  barcode        String?     @unique
+  unit           String      @default("dona") // dona, kg, litr, etc.
+  quantity       Float       @default(0)
+  minQuantity    Float       @default(10) // Minimal zaxira
+  purchasePrice  Float       // Sotib olish narxi
+  salePrice      Float       // Sotish narxi
+  margin         Float       // Marja (avtomatik hisoblanadi)
+  vatType        VATType     @default(NO_VAT)
+  expiryDate     DateTime?   // Yaroqlilik muddati
+  categoryId     String
+  category       Category    @relation(fields: [categoryId], references: [id])
+  supplierId     String
+  supplier       Supplier    @relation(fields: [supplierId], references: [id])
+  branchId       String
+  branch         Branch      @relation(fields: [branchId], references: [id])
+  saleItems      SaleItem[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@map("products")
+}
+
+enum VATType {
+  STANDARD    // Standart soliq
+  NO_VAT      // Soliqsiz
+  ZERO_VAT    // Soliq 0%
+}
+
+// Sotuvlar
+model Sale {
+  id          String      @id @default(cuid())
+  totalAmount Float       // Jami summa
+  paymentType PaymentType
+  cashAmount  Float?      // Naqd summa (aralash to'lovda)
+  cardAmount  Float?      // Karta summasi (aralash to'lovda)
+  cashierId   String
+  cashier     User        @relation(fields: [cashierId], references: [id])
+  branchId    String
+  branch      Branch      @relation(fields: [branchId], references: [id])
+  saleItems   SaleItem[]
+  createdAt   DateTime    @default(now())
+
+  @@map("sales")
+}
+
+enum PaymentType {
+  CASH   // Naqd
+  CARD   // Karta
+  MIXED  // Aralash
+}
+
+// Sotuv tafsilotlari
+model SaleItem {
+  id          String  @id @default(cuid())
+  saleId      String
+  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  quantity    Float
+  priceAtSale Float   // Sotilgan paytdagi narx
+
+  @@map("sale_items")
+}
