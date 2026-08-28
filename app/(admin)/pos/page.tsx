@@ -303,7 +303,6 @@ export default function PosPage() {
   const searchRef   = useRef<HTMLInputElement>(null);
   const scanBuf     = useRef('');
   const scanTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastKeyTime = useRef(0);
 
   /* ── Fetch ── */
   const fetchAll = useCallback(async () => {
@@ -372,23 +371,23 @@ export default function PosPage() {
   };
 
   /* ── Barcode Scanner ─────────────────────────────────────────
-     USB/Bluetooth skaner barcha harflarni juda tez (~5-30ms) yuboradi.
-     Birinchi harf kelganda buffer ochiladi, keyingilarida ham tez kelsa
-     skaner deb hisoblanadi. Enter kelganda qidirish amalga oshiriladi.
+     Skanerlar barcha harflarni <30ms da yuboradi.
+     Birinchi harf HAR DOIM buffer'ga qo'shiladi.
+     Agar 300ms ichida Enter kelmasa — buffer tozalanadi (skaner emas).
+     Enter kelsa — qidirish amalga oshadi.
   ─────────────────────────────────────────────────────────────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (showPay) return;
-
-      const now = Date.now();
-      const gap = now - lastKeyTime.current;
-      lastKeyTime.current = now;
 
       if (e.key === 'Enter') {
         const code = scanBuf.current.trim();
         scanBuf.current = '';
         if (scanTimer.current) clearTimeout(scanTimer.current);
         if (code.length < 3) return;
+
+        // e.preventDefault() — formalar uchun
+        e.preventDefault();
 
         // 1. Mahsulot
         const prod = products.find(p => p.barcode && p.barcode === code);
@@ -398,7 +397,7 @@ export default function PosPage() {
           beep(true);
           return;
         }
-        // 2. Taom
+        // 2. Taom (qaysi kategoriyada bo'lsa ham)
         const dish = dishes.find(d => d.barcode && d.barcode === code && d.isActive);
         if (dish) {
           addDish(dish);
@@ -412,27 +411,24 @@ export default function PosPage() {
         return;
       }
 
-      // Faqat printable char (raqam, harf)
+      // Faqat printable char
       if (e.key.length !== 1) return;
 
-      // Buffer bo'sh bo'lsa — birinchi harf: skaner bo'lishi mumkin,
-      // shuning uchun har doim buffer'ga qo'shamiz.
-      // Keyingi harflar tez (< 80ms) kelsa — skaner.
-      // Buffer'da narsa bo'lsa — davomi skaner.
-      const isScanner = scanBuf.current.length > 0 || gap < 80;
-
-      if (isScanner) {
-        scanBuf.current += e.key;
-        if (scanTimer.current) clearTimeout(scanTimer.current);
-        // 300ms ichida Enter kelmasa — buffer tozalanadi
-        scanTimer.current = setTimeout(() => {
-          scanBuf.current = '';
-        }, 300);
-      }
+      // Har doim buffer'ga qo'sh
+      scanBuf.current += e.key;
+      if (scanTimer.current) clearTimeout(scanTimer.current);
+      // 300ms ichida Enter kelmasa — bu klaviatura edi, tozala
+      scanTimer.current = setTimeout(() => {
+        scanBuf.current = '';
+      }, 300);
     };
 
     window.addEventListener('keydown', onKey);
     return () => {
+      window.removeEventListener('keydown', onKey);
+      if (scanTimer.current) clearTimeout(scanTimer.current);
+    };
+  }, [products, dishes, showPay, addProduct, addDish]);
       window.removeEventListener('keydown', onKey);
       if (scanTimer.current) clearTimeout(scanTimer.current);
     };
