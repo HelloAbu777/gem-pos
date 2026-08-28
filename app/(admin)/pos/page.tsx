@@ -1,636 +1,787 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Plus, Minus } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Search, ShoppingCart, Trash2, Plus, Minus,
+  CreditCard, Banknote, Layers, CheckCircle,
+  X, Clock, ChevronDown, ReceiptText, Package, UtensilsCrossed,
+} from 'lucide-react';
 
+/* ── Types ────────────────────────────────────────────────────── */
 interface Product {
-  id: string;
-  name: string;
-  barcode?: string;
-  salePrice: number;
-  quantity: number;
-  category: { name: string };
+  id: string; name: string; barcode?: string;
+  salePrice: number; purchasePrice: number;
+  quantity: number; minQuantity: number; unit: string;
+  category: { id: string; name: string };
+}
+interface Dish {
+  id: string; name: string; price: number;
+  barcode?: string | null; isActive: boolean;
+}
+interface Category { id: string; name: string }
+
+interface CartItem {
+  cartKey:       string;
+  type:          'product' | 'dish';
+  refId:         string;
+  name:          string;
+  salePrice:     number;
+  purchasePrice: number;
+  stockQty:      number;
+  unit:          string;
+  qty:           number;
 }
 
-interface CartItem extends Product {
-  cartQuantity: number;
+interface SaleHistoryItem {
+  id: string; totalAmount: number; paymentType: string;
+  cashAmount: number; cardAmount: number; createdAt: string;
+  cashier: { name: string };
+  saleItems: { quantity: number; priceAtSale: number; itemName: string }[];
 }
 
-export default function POSPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [barcodeBuffer, setBarcodeBuffer] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [scannerActive, setScannerActive] = useState(false);
-  const [lastScannedBarcode, setLastScannedBarcode] = useState<string>('');
-  const barcodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastKeypressRef = useRef<number>(0);
+type PayType = 'CASH' | 'CARD' | 'MIXED';
+type MainTab = 'pos' | 'history';
 
-  // Mahsulotlarni yuklash
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const fetchProducts = async () => {
-    try {
-      const res = await fetch('/api/products');
-      const data = await res.json();
-      setProducts(data);
-    } catch (error) {
-      console.error('Mahsulotlarni yuklashda xatolik:', error);
-    }
-  };
-
-  // BARCODE SCANNER - Avtomatik ishlaydi
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      const currentTime = Date.now();
-      const timeDiff = currentTime - lastKeypressRef.current;
-
-      // Agar tugmalar juda tez bosilsa (< 50ms), bu scanner
-      if (timeDiff < 50 && e.key !== 'Enter') {
-        e.preventDefault();
-      }
-
-      lastKeypressRef.current = currentTime;
-
-      // Enter tugmasi - barcode tugadi
-      if (e.key === 'Enter') {
-        if (barcodeBuffer.length > 3) {
-          e.preventDefault();
-          handleBarcodeScanned(barcodeBuffer);
-          setBarcodeBuffer('');
-        }
-        return;
-      }
-
-      // Raqamlar va harflar - barcode qismi
-      if (/^[a-zA-Z0-9]$/.test(e.key)) {
-        setBarcodeBuffer((prev) => prev + e.key);
-
-        // Timeout - agar scanner emas, tozalash
-        if (barcodeTimeoutRef.current) {
-          clearTimeout(barcodeTimeoutRef.current);
-        }
-        barcodeTimeoutRef.current = setTimeout(() => {
-          if (timeDiff > 100) {
-            setBarcodeBuffer('');
-          }
-        }, 500);
-      }
-    };
-
-    window.addEventListener('keypress', handleKeyPress);
-    return () => {
-      window.removeEventListener('keypress', handleKeyPress);
-      if (barcodeTimeoutRef.current) {
-        clearTimeout(barcodeTimeoutRef.current);
-      }
-    };
-  }, [barcodeBuffer]);
-
-  // Barcode orqali mahsulot qidirish va savatga qo'shish
-  const handleBarcodeScanned = async (barcode: string) => {
-    setScannerActive(true);
-    setLastScannedBarcode(barcode);
-    
-    console.log('🔍 Barcode skanerlandi:', barcode); // DEBUG
-    console.log('📂 Hozirgi kategoriya filtri:', selectedCategory); // DEBUG
-    
-    try {
-      const res = await fetch(`/api/products/barcode/${barcode}`);
-      console.log('📡 API javob statusi:', res.status); // DEBUG
-      
-      if (res.ok) {
-        const product = await res.json();
-        console.log('✅ Mahsulot topildi:', product.name, '- Kategoriya:', product.category?.name); // DEBUG
-        console.log('🎯 MUHIM: Kategoriya filteridan QATIY NAZAR savatga qo\'shilmoqda!'); // DEBUG
-        
-        // MUHIM: addToCart kategoriya filteridan mustaqil ishlaydi!
-        addToCart(product);
-        
-        // Success feedback - audio beep
-        playSuccessSound();
-      } else {
-        // Error feedback
-        const errorData = await res.json();
-        console.error('❌ Xato:', errorData.error, '- Barcode:', barcode); // DEBUG
-        console.error('📊 To\'liq xato ma\'lumoti:', errorData); // DEBUG
-        
-        // Foydalanuvchiga xabar ko'rsatish
-        alert(`❌ Mahsulot topilmadi!\n\n📦 Shtrix kod: ${barcode}\n\n💡 Sabab: ${errorData.error}\n\n🔍 Tekshiring:\n1. Database da bu barcode bormi?\n2. Barcode to'g'ri yozilganmi?\n3. Mahsulot sizning filialingizga tegishlimi?`);
-        
-        playErrorSound();
-      }
-    } catch (error) {
-      playErrorSound();
-      console.error('🔥 Barcode qidirishda xatolik:', error);
-      alert('❌ Server xatosi! Console ni tekshiring (F12).');
-    } finally {
-      setTimeout(() => {
-        setScannerActive(false);
-        setLastScannedBarcode('');
-      }, 1000);
-    }
-  };
-
-  // Success ovozi
-  const playSuccessSound = () => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-    gainNode.gain.value = 0.3;
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.1);
-  };
-
-  // Error ovozi
-  const playErrorSound = () => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = 200;
-    oscillator.type = 'sawtooth';
-    gainNode.gain.value = 0.3;
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.2);
-  };
-
-  // Savatga qo'shish
-  const addToCart = (product: Product) => {
-    console.log('🛒 Savatga qo\'shish:', product.name, '- Kategoriya:', product.category?.name); // DEBUG
-    
-    setCart((prevCart) => {
-      const existingItem = prevCart.find((item) => item.id === product.id);
-      
-      if (existingItem) {
-        // Agar mavjud bo'lsa, miqdorni oshirish
-        if (existingItem.cartQuantity < existingItem.quantity) {
-          console.log('✅ Miqdor oshirildi:', existingItem.cartQuantity + 1); // DEBUG
-          return prevCart.map((item) =>
-            item.id === product.id
-              ? { ...item, cartQuantity: item.cartQuantity + 1 }
-              : item
-          );
-        }
-        console.warn('⚠️ Zaxira yetarli emas!'); // DEBUG
-        alert(`Zaxira yetarli emas! Mavjud: ${existingItem.quantity}`);
-        return prevCart; // Zaxira yetarli emas
-      } else {
-        // Yangi mahsulot
-        if (product.quantity > 0) {
-          console.log('✅ Yangi mahsulot savatga qo\'shildi'); // DEBUG
-          return [...prevCart, { ...product, cartQuantity: 1 }];
-        }
-        console.warn('⚠️ Zaxira yo\'q!'); // DEBUG
-        alert('Bu mahsulot zaxirada yo\'q!');
-        return prevCart; // Zaxira yo'q
-      }
-    });
-  };
-
-  // Savatdan olib tashlash
-  const removeFromCart = (productId: string) => {
-    setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
-  };
-
-  // Miqdorni o'zgartirish
-  const updateCartQuantity = (productId: string, delta: number) => {
-    setCart((prevCart) =>
-      prevCart.map((item) => {
-        if (item.id === productId) {
-          const newQuantity = item.cartQuantity + delta;
-          if (newQuantity <= 0) return item;
-          if (newQuantity > item.quantity) return item;
-          return { ...item, cartQuantity: newQuantity };
-        }
-        return item;
-      })
-    );
-  };
-
-  // Jami summa
-  const totalAmount = cart.reduce(
-    (sum, item) => sum + item.salePrice * item.cartQuantity,
-    0
-  );
-
-  // Kategoriyalar
-  const categories = ['all', ...new Set(products.map((p) => p.category.name))];
-
-  // Filtrlangan mahsulotlar
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.barcode?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory =
-      selectedCategory === 'all' || product.category.name === selectedCategory;
-    return matchesSearch && matchesCategory;
+/* ── Helpers ──────────────────────────────────────────────────── */
+function fmt(n: number) {
+  return new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+}
+function fmtTime(d: string) {
+  return new Date(d).toLocaleString('uz-UZ', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
   });
+}
+const PAY_LABELS: Record<PayType, string> = {
+  CASH: 'Naqd', CARD: 'Karta', MIXED: 'Aralash',
+};
 
-  // Savatni tozalash
-  const clearCart = () => {
-    setCart([]);
-  };
+/* ── Beep sound ───────────────────────────────────────────────── */
+function beep(success: boolean) {
+  try {
+    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = success ? 880 : 220;
+    osc.type = success ? 'sine' : 'sawtooth';
+    gain.gain.value = 0.2;
+    osc.start();
+    osc.stop(ctx.currentTime + (success ? 0.1 : 0.2));
+  } catch { /* silent */ }
+}
 
+/* ── Receipt Modal ────────────────────────────────────────────── */
+function ReceiptModal({ sale, onClose }: {
+  sale: { totalAmount: number; paymentType: string; cashAmount: number; cardAmount: number; items: CartItem[] };
+  onClose: () => void;
+}) {
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Kassa (POS)</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Shtrix kod skanerdan foydalaning yoki mahsulotni tanlang
-            </p>
-          </div>
-          
-          {/* Scanner status indicator */}
-          {scannerActive && (
-            <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-lg border border-green-200 animate-pulse">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="font-medium">Skaner aktiv: {lastScannedBarcode}</span>
-            </div>
-          )}
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        <div className="bg-green-500 px-6 py-8 text-center text-white">
+          <CheckCircle className="w-14 h-14 mx-auto mb-3" />
+          <h2 className="text-2xl font-bold">Sotuv amalga oshdi!</h2>
         </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* Mahsulotlar paneli */}
-        <div className="flex-1 flex flex-col p-6 overflow-hidden">
-          {/* Qidiruv va kategoriyalar */}
-          <div className="mb-4 space-y-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Mahsulot nomi yoki shtrix kod..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-              />
-            </div>
-
-            {/* Kategoriyalar */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {categories.map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setSelectedCategory(category)}
-                  className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                    selectedCategory === category
-                      ? 'bg-gray-900 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-                  }`}
-                >
-                  {category === 'all' ? 'Barchasi' : category}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Mahsulotlar grid */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {filteredProducts.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  disabled={product.quantity === 0}
-                  className={`bg-white border rounded-lg p-4 text-left transition-all hover:shadow-md ${
-                    product.quantity === 0
-                      ? 'opacity-50 cursor-not-allowed'
-                      : 'hover:border-gray-900 cursor-pointer'
-                  }`}
-                >
-                  <div className="font-semibold text-gray-900 mb-1 line-clamp-2">
-                    {product.name}
-                  </div>
-                  <div className="text-xs text-gray-500 mb-2">
-                    {product.category.name}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-gray-900">
-                      {product.salePrice.toLocaleString()} so'm
-                    </span>
-                    <span
-                      className={`text-xs ${
-                        product.quantity > 10
-                          ? 'text-green-600'
-                          : product.quantity > 0
-                          ? 'text-orange-600'
-                          : 'text-red-600'
-                      }`}
-                    >
-                      {product.quantity} ta
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Savat paneli */}
-        <div className="w-96 bg-white border-l border-gray-200 flex flex-col">
-          {/* Savat header */}
-          <div className="p-4 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5 text-gray-900" />
-                <span className="font-semibold text-gray-900">Savat</span>
-                <span className="bg-gray-900 text-white text-xs px-2 py-0.5 rounded-full">
-                  {cart.length}
+        <div className="p-5 space-y-4">
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {sale.items.map((item, i) => (
+              <div key={i} className="flex justify-between text-sm">
+                <span className="flex items-center gap-1.5 text-gray-600 flex-1 mr-2 truncate">
+                  {item.type === 'dish'
+                    ? <UtensilsCrossed className="w-3 h-3 text-orange-400 flex-shrink-0" />
+                    : <Package className="w-3 h-3 text-gray-400 flex-shrink-0" />}
+                  {item.name} × {item.qty}
+                </span>
+                <span className="font-semibold text-gray-900 flex-shrink-0">
+                  {fmt(item.salePrice * item.qty)} so'm
                 </span>
               </div>
-              {cart.length > 0 && (
-                <button
-                  onClick={clearCart}
-                  className="text-red-600 hover:text-red-700 text-sm"
-                >
-                  Tozalash
-                </button>
-              )}
-            </div>
+            ))}
           </div>
-
-          {/* Savat elementlari */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {cart.length === 0 ? (
-              <div className="text-center text-gray-400 mt-8">
-                <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>Savat bo&apos;sh</p>
-                <p className="text-sm mt-1">Shtrix kod skaner yordamida qo&apos;shing</p>
-              </div>
-            ) : (
-              cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-gray-50 rounded-lg p-3 border border-gray-200"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1 pr-2">
-                      <div className="font-medium text-gray-900 text-sm">
-                        {item.name}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {item.salePrice.toLocaleString()} so'm
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => removeFromCart(item.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => updateCartQuantity(item.id, -1)}
-                        disabled={item.cartQuantity <= 1}
-                        className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-8 text-center font-medium">
-                        {item.cartQuantity}
-                      </span>
-                      <button
-                        onClick={() => updateCartQuantity(item.id, 1)}
-                        disabled={item.cartQuantity >= item.quantity}
-                        className="w-7 h-7 flex items-center justify-center bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-                    <div className="font-semibold text-gray-900">
-                      {(item.salePrice * item.cartQuantity).toLocaleString()} so'm
-                    </div>
-                  </div>
+          <div className="border-t border-dashed pt-3 space-y-1.5">
+            <div className="flex justify-between font-bold text-lg">
+              <span>Jami</span><span>{fmt(sale.totalAmount)} so'm</span>
+            </div>
+            <div className="flex justify-between text-sm text-gray-500">
+              <span>To'lov</span>
+              <span className="font-medium">{PAY_LABELS[sale.paymentType as PayType]}</span>
+            </div>
+            {sale.paymentType === 'MIXED' && (
+              <>
+                <div className="flex justify-between text-sm text-gray-400">
+                  <span>Naqd</span><span>{fmt(sale.cashAmount)} so'm</span>
                 </div>
-              ))
+                <div className="flex justify-between text-sm text-gray-400">
+                  <span>Karta</span><span>{fmt(sale.cardAmount)} so'm</span>
+                </div>
+              </>
             )}
           </div>
-
-          {/* To'lov qismi */}
-          <div className="border-t border-gray-200 p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Jami:</span>
-              <span className="text-2xl font-bold text-gray-900">
-                {totalAmount.toLocaleString()} so'm
-              </span>
-            </div>
-
-            <button
-              onClick={() => setPaymentModalOpen(true)}
-              disabled={cart.length === 0}
-              className="w-full bg-gray-900 text-white py-3 rounded-lg font-semibold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              <CreditCard className="w-5 h-5" />
-              To&apos;lovni amalga oshirish
-            </button>
-          </div>
+          <button onClick={onClose}
+            className="w-full py-3 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800">
+            Yangi sotuv
+          </button>
         </div>
       </div>
-
-      {/* To'lov modali */}
-      {paymentModalOpen && (
-        <PaymentModal
-          totalAmount={totalAmount}
-          cart={cart}
-          onClose={() => setPaymentModalOpen(false)}
-          onSuccess={() => {
-            clearCart();
-            setPaymentModalOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }
 
-// To'lov modali komponenti
-function PaymentModal({
-  totalAmount,
-  cart,
-  onClose,
-  onSuccess,
-}: {
-  totalAmount: number;
-  cart: CartItem[];
+/* ── Payment Modal ────────────────────────────────────────────── */
+function PaymentModal({ total, onConfirm, onClose, processing }: {
+  total: number;
+  onConfirm: (type: PayType, cash: number, card: number) => void;
   onClose: () => void;
-  onSuccess: () => void;
+  processing: boolean;
 }) {
-  const [paymentType, setPaymentType] = useState<'CASH' | 'CARD' | 'MIXED'>('CASH');
-  const [cashAmount, setCashAmount] = useState<string>(totalAmount.toString());
-  const [cardAmount, setCardAmount] = useState<string>('0');
-  const [processing, setProcessing] = useState(false);
+  const [payType, setPayType] = useState<PayType>('CASH');
+  const [cashAmt, setCashAmt] = useState('');
+  const [cardAmt, setCardAmt] = useState('');
+  const [err, setErr] = useState('');
+  const cashNum = Number(cashAmt) || 0;
+  const cardNum = Number(cardAmt) || 0;
 
-  const cashValue = parseFloat(cashAmount) || 0;
-  const cardValue = parseFloat(cardAmount) || 0;
-  const change = cashValue - totalAmount;
+  const handleCash = (v: string) => {
+    setCashAmt(v);
+    if (payType === 'MIXED') setCardAmt(String(Math.max(0, total - (Number(v) || 0))));
+    setErr('');
+  };
 
-  const handlePayment = async () => {
-    setProcessing(true);
-    try {
-      const res = await fetch('/api/sales', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          totalAmount,
-          paymentType,
-          cashAmount: paymentType === 'CARD' ? 0 : cashValue,
-          cardAmount: paymentType === 'CASH' ? 0 : cardValue,
-          items: cart.map((item) => ({
-            productId: item.id,
-            quantity: item.cartQuantity,
-            priceAtSale: item.salePrice,
-          })),
-        }),
-      });
-
-      if (res.ok) {
-        onSuccess();
-      } else {
-        alert('Xatolik yuz berdi');
+  const submit = () => {
+    setErr('');
+    if (payType === 'CASH') {
+      if (cashNum < total) { setErr('Naqd summa yetarli emas'); return; }
+      onConfirm('CASH', total, 0);
+    } else if (payType === 'CARD') {
+      onConfirm('CARD', 0, total);
+    } else {
+      if (Math.abs(cashNum + cardNum - total) > 1) {
+        setErr(`Naqd + Karta = ${fmt(cashNum + cardNum)}, jami ${fmt(total)}`);
+        return;
       }
-    } catch (error) {
-      console.error('To\'lov xatosi:', error);
-      alert('Xatolik yuz berdi');
-    } finally {
-      setProcessing(false);
+      onConfirm('MIXED', cashNum, cardNum);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-md w-full p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">To&apos;lov</h2>
-
-        <div className="space-y-4">
-          {/* Jami summa */}
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-sm text-gray-600 mb-1">To&apos;lov summasi</div>
-            <div className="text-2xl font-bold text-gray-900">
-              {totalAmount.toLocaleString()} so'm
-            </div>
-          </div>
-
-          {/* To'lov turi */}
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="bg-gray-900 px-6 py-5 flex justify-between items-center">
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-2 block">
-              To&apos;lov turi
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={() => setPaymentType('CASH')}
-                className={`py-2 px-4 rounded-lg border-2 transition-colors ${
-                  paymentType === 'CASH'
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <Banknote className="w-5 h-5 mx-auto mb-1" />
-                <div className="text-xs">Naqd</div>
+            <p className="text-sm text-gray-400">To'lov summasi</p>
+            <p className="text-3xl font-bold text-white">{fmt(total)} so'm</p>
+          </div>
+          <button onClick={onClose} disabled={processing}
+            className="p-2 hover:bg-gray-700 rounded-lg">
+            <X className="w-5 h-5 text-gray-400" />
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            {(['CASH', 'CARD', 'MIXED'] as PayType[]).map(t => (
+              <button key={t}
+                onClick={() => { setPayType(t); setErr(''); setCashAmt(''); setCardAmt(''); }}
+                className={`py-3 rounded-xl font-semibold text-sm flex flex-col items-center gap-1.5 ${
+                  payType === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}>
+                {t === 'CASH' && <Banknote className="w-5 h-5" />}
+                {t === 'CARD' && <CreditCard className="w-5 h-5" />}
+                {t === 'MIXED' && <Layers className="w-5 h-5" />}
+                {PAY_LABELS[t]}
               </button>
-              <button
-                onClick={() => setPaymentType('CARD')}
-                className={`py-2 px-4 rounded-lg border-2 transition-colors ${
-                  paymentType === 'CARD'
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <CreditCard className="w-5 h-5 mx-auto mb-1" />
-                <div className="text-xs">Karta</div>
-              </button>
-              <button
-                onClick={() => setPaymentType('MIXED')}
-                className={`py-2 px-4 rounded-lg border-2 transition-colors ${
-                  paymentType === 'MIXED'
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-xs">Aralash</div>
-              </button>
-            </div>
+            ))}
           </div>
 
-          {/* Naqd summa */}
-          {(paymentType === 'CASH' || paymentType === 'MIXED') && (
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Naqd summa
-              </label>
-              <input
-                type="number"
-                value={cashAmount}
-                onChange={(e) => setCashAmount(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900"
-              />
-              {paymentType === 'CASH' && change >= 0 && (
-                <div className="mt-2 text-sm text-gray-600">
-                  Qaytim: <span className="font-semibold">{change.toLocaleString()} so'm</span>
+          {payType === 'CASH' && (
+            <div className="space-y-3">
+              <input type="number" value={cashAmt} onChange={e => handleCash(e.target.value)}
+                placeholder={String(total)} autoFocus
+                className="w-full px-4 py-3 text-xl border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold" />
+              {cashNum >= total && (
+                <div className="flex justify-between px-4 py-3 bg-green-50 text-green-700 rounded-xl font-semibold">
+                  <span>Qaytim</span><span>{fmt(cashNum - total)} so'm</span>
                 </div>
               )}
             </div>
           )}
-
-          {/* Karta summa */}
-          {paymentType === 'MIXED' && (
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Karta summa
-              </label>
-              <input
-                type="number"
-                value={cardAmount}
-                onChange={(e) => setCardAmount(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-900"
-              />
+          {payType === 'CARD' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+              <CreditCard className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+              <p className="text-blue-700 font-semibold text-lg">{fmt(total)} so'm</p>
             </div>
           )}
-
-          {/* Tugmalar */}
-          <div className="flex gap-3 pt-4">
-            <button
-              onClick={onClose}
-              disabled={processing}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              Bekor qilish
-            </button>
-            <button
-              onClick={handlePayment}
-              disabled={
-                processing ||
-                (paymentType === 'CASH' && cashValue < totalAmount) ||
-                (paymentType === 'MIXED' && cashValue + cardValue !== totalAmount)
-              }
-              className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
-            >
-              {processing ? 'Jarayonda...' : 'Tasdiqlash'}
-            </button>
-          </div>
+          {payType === 'MIXED' && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-gray-600 mb-1 block">Naqd</label>
+                <input type="number" value={cashAmt} onChange={e => handleCash(e.target.value)}
+                  placeholder="0" autoFocus
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold text-lg" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-600 mb-1 block">Karta</label>
+                <input type="number" value={cardAmt} onChange={e => { setCardAmt(e.target.value); setErr(''); }}
+                  placeholder="0"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold text-lg" />
+              </div>
+              <div className={`flex justify-between px-4 py-2.5 rounded-xl text-sm font-medium ${
+                Math.abs(cashNum + cardNum - total) < 1 ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-600'
+              }`}>
+                <span>Jami</span><span>{fmt(cashNum + cardNum)} / {fmt(total)} so'm</span>
+              </div>
+            </div>
+          )}
+          {err && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{err}</div>}
+          <button onClick={submit} disabled={processing}
+            className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
+            {processing
+              ? <><svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>Saqlanmoqda...</>
+              : <><CheckCircle className="w-5 h-5" />Tasdiqlash</>}
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ── Scanned feedback banner ──────────────────────────────────── */
+function ScanFeedback({ item, onHide }: {
+  item: { name: string; type: 'product' | 'dish' | 'notfound'; code: string } | null;
+  onHide: () => void;
+}) {
+  useEffect(() => {
+    if (!item) return;
+    const t = setTimeout(onHide, 1500);
+    return () => clearTimeout(t);
+  }, [item, onHide]);
+
+  if (!item) return null;
+
+  const isOk = item.type !== 'notfound';
+  return (
+    <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-white font-semibold text-sm transition-all ${
+      isOk ? 'bg-green-600' : 'bg-red-600'
+    }`}>
+      {isOk
+        ? <><CheckCircle className="w-5 h-5" />{item.type === 'dish' ? '🍽' : '📦'} {item.name} — savatga qo&apos;shildi</>
+        : <><X className="w-5 h-5" /> {item.code} — topilmadi</>}
+    </div>
+  );
+}
+
+/* ── Main POS ─────────────────────────────────────────────────── */
+const DISHES_CAT = '__dishes__';
+
+export default function PosPage() {
+  const [mainTab,     setMainTab]     = useState<MainTab>('pos');
+  const [products,    setProducts]    = useState<Product[]>([]);
+  const [categories,  setCategories]  = useState<Category[]>([]);
+  const [dishes,      setDishes]      = useState<Dish[]>([]);
+  const [loadingProd, setLoadingProd] = useState(true);
+  const [search,      setSearch]      = useState('');
+  const [catFilter,   setCatFilter]   = useState('all');
+  const [cart,        setCart]        = useState<CartItem[]>([]);
+  const [showPay,     setShowPay]     = useState(false);
+  const [processing,  setProcessing]  = useState(false);
+  const [receipt,     setReceipt]     = useState<{
+    totalAmount: number; paymentType: string;
+    cashAmount: number; cardAmount: number; items: CartItem[];
+  } | null>(null);
+  const [history,     setHistory]     = useState<SaleHistoryItem[]>([]);
+  const [histTotal,   setHistTotal]   = useState(0);
+  const [loadingHist, setLoadingHist] = useState(false);
+  const [expandedId,  setExpandedId]  = useState<string | null>(null);
+  const [scanFeedback, setScanFeedback] = useState<{
+    name: string; type: 'product' | 'dish' | 'notfound'; code: string;
+  } | null>(null);
+
+  const searchRef   = useRef<HTMLInputElement>(null);
+  const scanBuf     = useRef('');
+  const scanTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastKeyTime = useRef(0);
+
+  /* ── Fetch ── */
+  const fetchAll = useCallback(async () => {
+    setLoadingProd(true);
+    try {
+      const [pr, cr, dr] = await Promise.all([
+        fetch('/api/products').then(r => r.json()),
+        fetch('/api/categories').then(r => r.json()),
+        fetch('/api/dishes').then(r => r.json()),
+      ]);
+      setProducts(Array.isArray(pr) ? pr : []);
+      setCategories(Array.isArray(cr) ? cr : []);
+      setDishes(Array.isArray(dr) ? dr.filter((d: Dish) => d.isActive) : []);
+    } finally { setLoadingProd(false); }
+  }, []);
+
+  const fetchHistory = useCallback(async () => {
+    setLoadingHist(true);
+    try {
+      const r = await fetch('/api/sales/history?limit=50');
+      const d = await r.json();
+      setHistory(d.sales ?? []);
+      setHistTotal(d.total ?? 0);
+    } finally { setLoadingHist(false); }
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { if (mainTab === 'history') fetchHistory(); }, [mainTab, fetchHistory]);
+
+  /* ── Cart helpers ── */
+  const addProduct = useCallback((p: Product) => {
+    if (p.quantity <= 0) return;
+    const key = `product-${p.id}`;
+    setCart(prev => {
+      const ex = prev.find(i => i.cartKey === key);
+      if (ex) {
+        if (ex.qty >= p.quantity) return prev;
+        return prev.map(i => i.cartKey === key ? { ...i, qty: i.qty + 1 } : i);
+      }
+      return [...prev, {
+        cartKey: key, type: 'product', refId: p.id, name: p.name,
+        salePrice: p.salePrice, purchasePrice: p.purchasePrice,
+        stockQty: p.quantity, unit: p.unit, qty: 1,
+      }];
+    });
+  }, []);
+
+  const addDish = useCallback((d: Dish) => {
+    const key = `dish-${d.id}`;
+    setCart(prev => {
+      const ex = prev.find(i => i.cartKey === key);
+      if (ex) return prev.map(i => i.cartKey === key ? { ...i, qty: i.qty + 1 } : i);
+      return [...prev, {
+        cartKey: key, type: 'dish', refId: d.id, name: d.name,
+        salePrice: d.price, purchasePrice: 0,
+        stockQty: Infinity, unit: 'porsiya', qty: 1,
+      }];
+    });
+  }, []);
+
+  const updateQty = (key: string, delta: number) => {
+    setCart(prev =>
+      prev.map(i => i.cartKey === key ? { ...i, qty: i.qty + delta } : i)
+          .filter(i => i.qty > 0)
+    );
+  };
+
+  /* ── Barcode Scanner ─────────────────────────────────────────
+     Skanerlar har harfni ~5-30ms ichida yuboradi.
+     Oddiy klaviatura ~100-300ms.
+     Shu farqqa asoslanib aniqlaymiz.
+  ─────────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (showPay) return; // To'lov modali ochiq bo'lsa ishlamaydi
+
+      const now = Date.now();
+      const gap = now - lastKeyTime.current;
+      lastKeyTime.current = now;
+
+      if (e.key === 'Enter') {
+        const code = scanBuf.current.trim();
+        scanBuf.current = '';
+        if (scanTimer.current) clearTimeout(scanTimer.current);
+        if (code.length < 3) return;
+
+        // 1. Mahsulot
+        const prod = products.find(p => p.barcode && p.barcode === code);
+        if (prod) {
+          addProduct(prod);
+          setScanFeedback({ name: prod.name, type: 'product', code });
+          beep(true);
+          setSearch('');
+          return;
+        }
+        // 2. Taom
+        const dish = dishes.find(d => d.barcode && d.barcode === code && d.isActive);
+        if (dish) {
+          addDish(dish);
+          setScanFeedback({ name: dish.name, type: 'dish', code });
+          beep(true);
+          setSearch('');
+          return;
+        }
+        // 3. Topilmadi
+        setScanFeedback({ name: '', type: 'notfound', code });
+        beep(false);
+        return;
+      }
+
+      // Faqat printable char
+      if (e.key.length !== 1) return;
+
+      // Agar gap < 80ms yoki buffer to'lgan bo'lsa — skaner
+      if (gap < 80 || scanBuf.current.length > 0) {
+        scanBuf.current += e.key;
+        if (scanTimer.current) clearTimeout(scanTimer.current);
+        scanTimer.current = setTimeout(() => { scanBuf.current = ''; }, 400);
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (scanTimer.current) clearTimeout(scanTimer.current);
+    };
+  }, [products, dishes, showPay, addProduct, addDish]);
+
+  /* ── Sale ── */
+  const confirmSale = async (payType: PayType, cashAmt: number, cardAmt: number) => {
+    setProcessing(true);
+    try {
+      const items = cart.map(i => ({
+        productId:   i.type === 'product' ? i.refId : null,
+        dishId:      i.type === 'dish'    ? i.refId : null,
+        itemName:    i.name,
+        quantity:    i.qty,
+        priceAtSale: i.salePrice,
+      }));
+      const res = await fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentType: payType, cashAmount: cashAmt, cardAmount: cardAmt, items }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Xatolik'); return; }
+      setReceipt({
+        totalAmount: cart.reduce((s, i) => s + i.salePrice * i.qty, 0),
+        paymentType: payType, cashAmount: cashAmt, cardAmount: cardAmt, items: [...cart],
+      });
+      setShowPay(false);
+      setCart([]);
+      fetchAll();
+    } finally { setProcessing(false); }
+  };
+
+  const cartTotal = cart.reduce((s, i) => s + i.salePrice * i.qty, 0);
+  const cartCount = cart.reduce((s, i) => s + i.qty, 0);
+
+  const showDishes = catFilter === DISHES_CAT;
+  const filteredProds = showDishes ? [] : products.filter(p => {
+    const q = search.toLowerCase();
+    return (
+      (!q || p.name.toLowerCase().includes(q) || (p.barcode?.toLowerCase().includes(q) ?? false)) &&
+      (catFilter === 'all' || p.category.id === catFilter)
+    );
+  });
+  const filteredDishes = showDishes
+    ? dishes.filter(d => !search || d.name.toLowerCase().includes(search.toLowerCase()))
+    : [];
+
+  /* ── Render ── */
+  return (
+    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+
+      {/* Scan feedback */}
+      <ScanFeedback item={scanFeedback} onHide={() => setScanFeedback(null)} />
+
+      {/* Top bar */}
+      <div className="bg-white border-b border-gray-200 px-5 py-3 flex items-center gap-4 flex-shrink-0">
+        <h1 className="text-xl font-bold text-gray-900 hidden md:block">Kassa</h1>
+
+        <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+          {(['pos', 'history'] as MainTab[]).map(t => (
+            <button key={t} onClick={() => setMainTab(t)}
+              className={`px-4 py-2 text-sm font-medium flex items-center gap-2 ${
+                mainTab === t ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}>
+              {t === 'pos' ? <><ShoppingCart className="w-4 h-4" /> Kassa</> : <><Clock className="w-4 h-4" /> Tarix</>}
+              {t === 'history' && histTotal > 0 && mainTab !== 'history' && (
+                <span className="bg-gray-200 text-gray-700 px-1.5 rounded-full text-xs">{histTotal}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {mainTab === 'pos' && (
+          <div className="flex-1 flex items-center gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input ref={searchRef} type="text" value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Nomi yoki barkod..."
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none" />
+            </div>
+            <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none bg-white">
+              <option value="all">Barcha mahsulotlar</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {dishes.length > 0 && (
+                <option value={DISHES_CAT}>🍽 Taomlar ({dishes.length})</option>
+              )}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* POS */}
+      {mainTab === 'pos' && (
+        <div className="flex flex-1 overflow-hidden">
+
+          {/* Grid */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {loadingProd ? (
+              <div className="flex justify-center items-center h-full">
+                <svg className="animate-spin w-8 h-8 text-gray-300" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              </div>
+            ) : showDishes ? (
+              filteredDishes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                  <UtensilsCrossed className="w-12 h-12 mb-3 text-gray-200" />
+                  <p>Taomlar yo'q</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                  {filteredDishes.map(d => {
+                    const inCart = cart.find(i => i.cartKey === `dish-${d.id}`);
+                    return (
+                      <button key={d.id} onClick={() => addDish(d)}
+                        className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${
+                          inCart ? 'border-orange-400 ring-1 ring-orange-400' : 'border-gray-200 hover:border-orange-300'
+                        }`}>
+                        {inCart && (
+                          <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                            {inCart.qty}
+                          </span>
+                        )}
+                        <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto">
+                          <UtensilsCrossed className="w-5 h-5 text-orange-500" />
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{d.name}</p>
+                        <p className="text-sm font-bold text-gray-900 text-center">
+                          {fmt(d.price)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span>
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            ) : (
+              filteredProds.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                  <Package className="w-12 h-12 mb-3 text-gray-200" />
+                  <p>Mahsulotlar topilmadi</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                  {filteredProds.map(p => {
+                    const inCart = cart.find(i => i.cartKey === `product-${p.id}`);
+                    const isOut  = p.quantity <= 0;
+                    return (
+                      <button key={p.id} onClick={() => addProduct(p)} disabled={isOut}
+                        className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${
+                          isOut   ? 'opacity-40 cursor-not-allowed border-gray-200'
+                          : inCart ? 'border-gray-900 ring-1 ring-gray-900'
+                          : 'border-gray-200 hover:border-gray-400'
+                        }`}>
+                        {inCart && (
+                          <span className="absolute -top-2 -right-2 bg-gray-900 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                            {inCart.qty}
+                          </span>
+                        )}
+                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto">
+                          <Package className="w-5 h-5 text-gray-400" />
+                        </div>
+                        <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{p.name}</p>
+                        <p className="text-sm font-bold text-gray-900 text-center">
+                          {fmt(p.salePrice)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span>
+                        </p>
+                        <p className={`text-xs text-center mt-0.5 ${
+                          isOut ? 'text-red-500' : p.quantity <= p.minQuantity ? 'text-orange-500' : 'text-gray-400'
+                        }`}>
+                          {isOut ? 'Tugagan' : `${p.quantity} ${p.unit}`}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Cart */}
+          <div className="w-80 xl:w-96 bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
+            <div className="px-4 py-3.5 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-gray-700" />
+                <span className="font-bold text-gray-900">Savat</span>
+                {cartCount > 0 && (
+                  <span className="bg-gray-900 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cartCount}</span>
+                )}
+              </div>
+              {cart.length > 0 && (
+                <button onClick={() => setCart([])}
+                  className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700">
+                  <Trash2 className="w-3.5 h-3.5" /> Tozalash
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {cart.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-300 py-10">
+                  <ShoppingCart className="w-12 h-12 mb-3" />
+                  <p className="text-sm">Savat bo&apos;sh</p>
+                  <p className="text-xs mt-1 text-gray-400">Mahsulot bosing yoki barkod skanerlang</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {cart.map(item => (
+                    <div key={item.cartKey} className="px-4 py-3 flex items-center gap-3">
+                      <button onClick={() => setCart(p => p.filter(i => i.cartKey !== item.cartKey))}
+                        className="text-gray-300 hover:text-red-500 flex-shrink-0">
+                        <X className="w-4 h-4" />
+                      </button>
+                      <div className="flex-shrink-0">
+                        {item.type === 'dish'
+                          ? <UtensilsCrossed className="w-4 h-4 text-orange-400" />
+                          : <Package className="w-4 h-4 text-gray-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
+                        <p className="text-xs text-gray-400">{fmt(item.salePrice)} so'm</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button onClick={() => updateQty(item.cartKey, -1)}
+                          className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100">
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
+                        <button onClick={() => updateQty(item.cartKey, 1)}
+                          disabled={item.type === 'product' && item.qty >= item.stockQty}
+                          className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-30">
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="text-right flex-shrink-0 w-20">
+                        <p className="text-sm font-bold text-gray-900">{fmt(item.salePrice * item.qty)}</p>
+                        <p className="text-xs text-gray-400">so'm</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 p-4 space-y-3">
+              {cart.length > 0 && (
+                <div className="flex justify-between text-xs bg-green-50 px-3 py-2 rounded-lg text-gray-500">
+                  <span>Sof foyda</span>
+                  <span className="font-semibold text-green-600">
+                    +{fmt(cart.reduce((s, i) => s + (i.salePrice - i.purchasePrice) * i.qty, 0))} so'm
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-baseline">
+                <span className="text-gray-600 font-medium">Jami</span>
+                <span className="text-2xl font-bold text-gray-900">{fmt(cartTotal)} so'm</span>
+              </div>
+              <button onClick={() => setShowPay(true)} disabled={cart.length === 0}
+                className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <ReceiptText className="w-5 h-5" /> Sotish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History */}
+      {mainTab === 'history' && (
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-bold text-gray-900">
+                Sotuvlar tarixi <span className="text-sm font-normal text-gray-500">({histTotal} ta)</span>
+              </h2>
+              <button onClick={fetchHistory}
+                className="text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-600">
+                Yangilash
+              </button>
+            </div>
+            {loadingHist ? (
+              <div className="flex justify-center py-16">
+                <svg className="animate-spin w-8 h-8 text-gray-400" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+              </div>
+            ) : history.length === 0 ? (
+              <div className="py-16 text-center text-gray-400">
+                <Clock className="w-10 h-10 mx-auto mb-3 text-gray-200" />
+                <p>Sotuvlar tarixi yo&apos;q</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {history.map(sale => {
+                  const isExp = expandedId === sale.id;
+                  const PC: Record<string, string> = {
+                    CASH: 'bg-green-100 text-green-700',
+                    CARD: 'bg-blue-100 text-blue-700',
+                    MIXED: 'bg-purple-100 text-purple-700',
+                  };
+                  return (
+                    <div key={sale.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                      <button onClick={() => setExpandedId(isExp ? null : sale.id)}
+                        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 text-left">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {sale.saleItems.reduce((s, i) => s + i.quantity, 0)} ta element
+                          </p>
+                          <p className="text-xs text-gray-400">{fmtTime(sale.createdAt)} · {sale.cashier?.name}</p>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${PC[sale.paymentType] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {PAY_LABELS[sale.paymentType as PayType] ?? sale.paymentType}
+                        </span>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-bold text-gray-900">{fmt(sale.totalAmount)}</p>
+                          <p className="text-xs text-gray-400">so'm</p>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExp ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isExp && (
+                        <div className="border-t border-gray-100 px-5 py-4 bg-gray-50 space-y-2">
+                          {sale.saleItems.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-sm">
+                              <span className="text-gray-600">{item.itemName || '—'} × {item.quantity}</span>
+                              <span className="font-semibold">{fmt(item.priceAtSale * item.quantity)} so'm</span>
+                            </div>
+                          ))}
+                          {sale.paymentType === 'MIXED' && (
+                            <div className="pt-2 border-t border-gray-200 text-xs text-gray-500 space-y-1">
+                              <div className="flex justify-between"><span>Naqd</span><span>{fmt(sale.cashAmount)} so'm</span></div>
+                              <div className="flex justify-between"><span>Karta</span><span>{fmt(sale.cardAmount)} so'm</span></div>
+                            </div>
+                          )}
+                          <div className="pt-2 border-t border-gray-200 flex justify-between font-bold text-sm">
+                            <span>Jami</span><span>{fmt(sale.totalAmount)} so'm</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showPay && (
+        <PaymentModal total={cartTotal} processing={processing} onConfirm={confirmSale} onClose={() => setShowPay(false)} />
+      )}
+      {receipt && (
+        <ReceiptModal sale={receipt} onClose={() => { setReceipt(null); fetchAll(); }} />
+      )}
     </div>
   );
 }
