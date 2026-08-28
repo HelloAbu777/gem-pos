@@ -96,22 +96,34 @@ export default function POSPage() {
     setScannerActive(true);
     setLastScannedBarcode(barcode);
     
+    console.log('🔍 Barcode skanerlandi:', barcode); // DEBUG
+    
     try {
       const res = await fetch(`/api/products/barcode/${barcode}`);
+      console.log('📡 API javob statusi:', res.status); // DEBUG
+      
       if (res.ok) {
         const product = await res.json();
+        console.log('✅ Mahsulot topildi:', product.name, '- Kategoriya:', product.category?.name); // DEBUG
         addToCart(product);
         
         // Success feedback - audio beep
         playSuccessSound();
       } else {
         // Error feedback
+        const errorData = await res.json();
+        console.error('❌ Xato:', errorData.error, '- Barcode:', barcode); // DEBUG
+        console.error('📊 To\'liq xato ma\'lumoti:', errorData); // DEBUG
+        
+        // Foydalanuvchiga xabar ko'rsatish
+        alert(`Mahsulot topilmadi!\nShtrix kod: ${barcode}\nSabab: ${errorData.error}`);
+        
         playErrorSound();
-        console.warn('Mahsulot topilmadi:', barcode);
       }
     } catch (error) {
       playErrorSound();
-      console.error('Barcode qidirishda xatolik:', error);
+      console.error('🔥 Barcode qidirishda xatolik:', error);
+      alert('Server xatosi! Console ni tekshiring.');
     } finally {
       setTimeout(() => {
         setScannerActive(false);
@@ -156,24 +168,32 @@ export default function POSPage() {
 
   // Savatga qo'shish
   const addToCart = (product: Product) => {
+    console.log('🛒 Savatga qo\'shish:', product.name, '- Kategoriya:', product.category?.name); // DEBUG
+    
     setCart((prevCart) => {
       const existingItem = prevCart.find((item) => item.id === product.id);
       
       if (existingItem) {
         // Agar mavjud bo'lsa, miqdorni oshirish
         if (existingItem.cartQuantity < existingItem.quantity) {
+          console.log('✅ Miqdor oshirildi:', existingItem.cartQuantity + 1); // DEBUG
           return prevCart.map((item) =>
             item.id === product.id
               ? { ...item, cartQuantity: item.cartQuantity + 1 }
               : item
           );
         }
+        console.warn('⚠️ Zaxira yetarli emas!'); // DEBUG
+        alert(`Zaxira yetarli emas! Mavjud: ${existingItem.quantity}`);
         return prevCart; // Zaxira yetarli emas
       } else {
         // Yangi mahsulot
         if (product.quantity > 0) {
+          console.log('✅ Yangi mahsulot savatga qo\'shildi'); // DEBUG
           return [...prevCart, { ...product, cartQuantity: 1 }];
         }
+        console.warn('⚠️ Zaxira yo\'q!'); // DEBUG
+        alert('Bu mahsulot zaxirada yo\'q!');
         return prevCart; // Zaxira yo'q
       }
     });

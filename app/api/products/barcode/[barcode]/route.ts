@@ -19,6 +19,9 @@ export async function GET(
 
     const barcode = params.barcode;
 
+    console.log('🔍 Barcode qidiruv boshlandi:', barcode); // DEBUG
+    console.log('👤 Session branchId:', session.branchId); // DEBUG
+
     if (!barcode || barcode.trim() === '') {
       return NextResponse.json(
         { error: 'Shtrix kod kiritilmagan' },
@@ -26,11 +29,12 @@ export async function GET(
       );
     }
 
-    // Database dan qidirish
+    // Database dan qidirish - BARCHA KATEGORIYALARDAN
     const product = await prisma.product.findFirst({
       where: { 
         barcode: barcode.trim(),
         branchId: session.branchId, // Faqat o'z filialining mahsulotlari
+        // Hech qanday category filter yo'q - BARCHA kategoriyalar qidiriladi
       },
       include: {
         category: {
@@ -47,6 +51,18 @@ export async function GET(
         },
       },
     });
+
+    console.log('📦 Database natija:', product ? `Topildi: ${product.name}` : 'Topilmadi'); // DEBUG
+    if (product) {
+      console.log('📊 Mahsulot tafsiloti:', {
+        id: product.id,
+        name: product.name,
+        barcode: product.barcode,
+        category: product.category.name,
+        quantity: product.quantity,
+        salePrice: product.salePrice
+      }); // DEBUG
+    }
 
     if (!product) {
       return NextResponse.json(
