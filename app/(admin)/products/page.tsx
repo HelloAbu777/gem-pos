@@ -25,10 +25,16 @@ export default function ProductsPage() {
   const fetchProducts = async () => {
     try {
       const res = await fetch('/api/products');
+      if (!res.ok) {
+        console.error('Products API error:', res.status);
+        setProducts([]); // Empty array instead of undefined
+        return;
+      }
       const data = await res.json();
-      setProducts(data);
+      setProducts(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching products:', error);
+      setProducts([]);
     }
   };
 
