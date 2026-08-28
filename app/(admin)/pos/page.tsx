@@ -40,6 +40,7 @@ const fmtTime = (d: string) => new Date(d).toLocaleString('uz-UZ', {
 });
 const PAY_LABELS: Record<PayType, string> = { CASH: 'Naqd', CARD: 'Karta', MIXED: 'Aralash' };
 const DISHES_CAT = '__dishes__';
+const DISHES_CAT = '__dishes__';
 
 function beep(ok: boolean) {
   try {
