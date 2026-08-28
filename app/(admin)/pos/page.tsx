@@ -97,6 +97,7 @@ export default function POSPage() {
     setLastScannedBarcode(barcode);
     
     console.log('🔍 Barcode skanerlandi:', barcode); // DEBUG
+    console.log('📂 Hozirgi kategoriya filtri:', selectedCategory); // DEBUG
     
     try {
       const res = await fetch(`/api/products/barcode/${barcode}`);
@@ -105,6 +106,9 @@ export default function POSPage() {
       if (res.ok) {
         const product = await res.json();
         console.log('✅ Mahsulot topildi:', product.name, '- Kategoriya:', product.category?.name); // DEBUG
+        console.log('🎯 MUHIM: Kategoriya filteridan QATIY NAZAR savatga qo\'shilmoqda!'); // DEBUG
+        
+        // MUHIM: addToCart kategoriya filteridan mustaqil ishlaydi!
         addToCart(product);
         
         // Success feedback - audio beep
@@ -116,14 +120,14 @@ export default function POSPage() {
         console.error('📊 To\'liq xato ma\'lumoti:', errorData); // DEBUG
         
         // Foydalanuvchiga xabar ko'rsatish
-        alert(`Mahsulot topilmadi!\nShtrix kod: ${barcode}\nSabab: ${errorData.error}`);
+        alert(`❌ Mahsulot topilmadi!\n\n📦 Shtrix kod: ${barcode}\n\n💡 Sabab: ${errorData.error}\n\n🔍 Tekshiring:\n1. Database da bu barcode bormi?\n2. Barcode to'g'ri yozilganmi?\n3. Mahsulot sizning filialingizga tegishlimi?`);
         
         playErrorSound();
       }
     } catch (error) {
       playErrorSound();
       console.error('🔥 Barcode qidirishda xatolik:', error);
-      alert('Server xatosi! Console ni tekshiring.');
+      alert('❌ Server xatosi! Console ni tekshiring (F12).');
     } finally {
       setTimeout(() => {
         setScannerActive(false);
