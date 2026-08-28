@@ -5,20 +5,16 @@ import { getSession } from '@/lib/auth/session';
 // GET - Barcha mahsulotlar (Real Database)
 export async function GET() {
   try {
-    // Session tekshiruvi
+    // Session tekshiruvi - OPTIONAL for POS
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Avtorizatsiya talab qilinadi' },
-        { status: 401 }
-      );
-    }
+    
+    // Agar session bo'lmasa — barcha mahsulotlarni qaytarish (POS uchun)
+    const whereClause = session?.branchId
+      ? { branchId: session.branchId }
+      : {};
 
-    // Faqat o'z filialining mahsulotlarini olish
     const products = await prisma.product.findMany({
-      where: {
-        branchId: session.branchId,
-      },
+      where: whereClause,
       include: {
         category: {
           select: {
