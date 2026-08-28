@@ -375,13 +375,25 @@ export default function PosPage() {
 
   const cartTotal = cart.reduce((s,i)=>s+i.salePrice*i.qty, 0);
   const cartCount = cart.reduce((s,i)=>s+i.qty, 0);
-  const showDishes = catFilter === DISHES_CAT;
-  const filteredProds = showDishes ? [] : products.filter(p => {
-    const q = search.toLowerCase();
-    return (!q || p.name.toLowerCase().includes(q) || (p.barcode?.toLowerCase().includes(q)??false)) &&
-           (catFilter==='all' || p.category.id===catFilter);
+
+  const q = search.toLowerCase();
+
+  // "Taomlar" kategoriyasi tanlansa — faqat taomlar
+  // Boshqa kategoriya tanlansa — faqat o'sha kategoriya mahsulotlari
+  // "all" tanlansa — mahsulotlar + taomlar birga (unified list)
+  const showOnlyDishes = catFilter === DISHES_CAT;
+  const showAll        = catFilter === 'all';
+
+  const filteredProds = showOnlyDishes ? [] : products.filter(p => {
+    const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.barcode?.toLowerCase().includes(q) ?? false);
+    const matchCat    = showAll || p.category.id === catFilter;
+    return matchSearch && matchCat;
   });
-  const filteredDishes = showDishes ? dishes.filter(d=>!search||d.name.toLowerCase().includes(search.toLowerCase())) : [];
+
+  // Taomlar: "all" da ham, "Taomlar" da ham ko'rinadi
+  const filteredDishes = (showAll || showOnlyDishes)
+    ? dishes.filter(d => !q || d.name.toLowerCase().includes(q) || (d.barcode?.toLowerCase().includes(q) ?? false))
+    : [];
 
   /* ── Render ── */
   return (
@@ -433,42 +445,46 @@ export default function PosPage() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
                 </svg>
               </div>
-            ):showDishes?(
-              filteredDishes.length===0
-                ?<div className="flex flex-col items-center justify-center h-full text-gray-400"><UtensilsCrossed className="w-12 h-12 mb-3 text-gray-200"/><p>Taomlar yo&apos;q</p></div>
-                :<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                  {filteredDishes.map(d=>{
-                    const ic=cart.find(i=>i.cartKey===`dish-${d.id}`);
-                    return(
-                      <button key={d.id} onClick={()=>addDish(d)}
-                        className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${ic?'border-orange-400 ring-1 ring-orange-400':'border-gray-200 hover:border-orange-300'}`}>
-                        {ic&&<span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{ic.qty}</span>}
-                        <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto"><UtensilsCrossed className="w-5 h-5 text-orange-500"/></div>
-                        <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{d.name}</p>
-                        <p className="text-sm font-bold text-gray-900 text-center">{fmt(d.price)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
-                      </button>
-                    );
-                  })}
-                </div>
+            ):(filteredProds.length===0 && filteredDishes.length===0)?(
+              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <Package className="w-12 h-12 mb-3 text-gray-200"/>
+                <p>Mahsulot yoki taom topilmadi</p>
+              </div>
             ):(
-              filteredProds.length===0
-                ?<div className="flex flex-col items-center justify-center h-full text-gray-400"><Package className="w-12 h-12 mb-3 text-gray-200"/><p>Mahsulotlar topilmadi</p></div>
-                :<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                  {filteredProds.map(p=>{
-                    const ic=cart.find(i=>i.cartKey===`product-${p.id}`);
-                    const out=p.quantity<=0;
-                    return(
-                      <button key={p.id} onClick={()=>addProduct(p)} disabled={out}
-                        className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${out?'opacity-40 cursor-not-allowed border-gray-200':ic?'border-gray-900 ring-1 ring-gray-900':'border-gray-200 hover:border-gray-400'}`}>
-                        {ic&&<span className="absolute -top-2 -right-2 bg-gray-900 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{ic.qty}</span>}
-                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto"><Package className="w-5 h-5 text-gray-400"/></div>
-                        <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{p.name}</p>
-                        <p className="text-sm font-bold text-gray-900 text-center">{fmt(p.salePrice)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
-                        <p className={`text-xs text-center mt-0.5 ${out?'text-red-500':p.quantity<=p.minQuantity?'text-orange-500':'text-gray-400'}`}>{out?'Tugagan':`${p.quantity} ${p.unit}`}</p>
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+
+                {/* Mahsulotlar */}
+                {filteredProds.map(p=>{
+                  const ic=cart.find(i=>i.cartKey===`product-${p.id}`);
+                  const out=p.quantity<=0;
+                  return(
+                    <button key={`prod-${p.id}`} onClick={()=>addProduct(p)} disabled={out}
+                      className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${out?'opacity-40 cursor-not-allowed border-gray-200':ic?'border-gray-900 ring-1 ring-gray-900':'border-gray-200 hover:border-gray-400'}`}>
+                      {ic&&<span className="absolute -top-2 -right-2 bg-gray-900 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{ic.qty}</span>}
+                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto"><Package className="w-5 h-5 text-gray-400"/></div>
+                      <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{p.name}</p>
+                      <p className="text-sm font-bold text-gray-900 text-center">{fmt(p.salePrice)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
+                      <p className={`text-xs text-center mt-0.5 ${out?'text-red-500':p.quantity<=p.minQuantity?'text-orange-500':'text-gray-400'}`}>{out?'Tugagan':`${p.quantity} ${p.unit}`}</p>
+                    </button>
+                  );
+                })}
+
+                {/* Taomlar — mahsulotlar bilan birga */}
+                {filteredDishes.map(d=>{
+                  const ic=cart.find(i=>i.cartKey===`dish-${d.id}`);
+                  return(
+                    <button key={`dish-${d.id}`} onClick={()=>addDish(d)}
+                      className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${ic?'border-orange-400 ring-1 ring-orange-400':'border-gray-200 hover:border-orange-300'}`}>
+                      {ic&&<span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{ic.qty}</span>}
+                      <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto"><UtensilsCrossed className="w-5 h-5 text-orange-500"/></div>
+                      <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{d.name}</p>
+                      <p className="text-sm font-bold text-gray-900 text-center">{fmt(d.price)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
+                      <p className="text-xs text-center mt-0.5 text-orange-500 font-medium">🍽 taom</p>
+                    </button>
+                  );
+                })}
+
+              </div>
             )}
           </div>
 
