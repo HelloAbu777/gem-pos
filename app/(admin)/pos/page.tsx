@@ -372,13 +372,13 @@ export default function PosPage() {
   };
 
   /* ── Barcode Scanner ─────────────────────────────────────────
-     Skanerlar har harfni ~5-30ms ichida yuboradi.
-     Oddiy klaviatura ~100-300ms.
-     Shu farqqa asoslanib aniqlaymiz.
+     USB/Bluetooth skaner barcha harflarni juda tez (~5-30ms) yuboradi.
+     Birinchi harf kelganda buffer ochiladi, keyingilarida ham tez kelsa
+     skaner deb hisoblanadi. Enter kelganda qidirish amalga oshiriladi.
   ─────────────────────────────────────────────────────────────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (showPay) return; // To'lov modali ochiq bo'lsa ishlamaydi
+      if (showPay) return;
 
       const now = Date.now();
       const gap = now - lastKeyTime.current;
@@ -396,7 +396,6 @@ export default function PosPage() {
           addProduct(prod);
           setScanFeedback({ name: prod.name, type: 'product', code });
           beep(true);
-          setSearch('');
           return;
         }
         // 2. Taom
@@ -405,7 +404,6 @@ export default function PosPage() {
           addDish(dish);
           setScanFeedback({ name: dish.name, type: 'dish', code });
           beep(true);
-          setSearch('');
           return;
         }
         // 3. Topilmadi
@@ -414,14 +412,22 @@ export default function PosPage() {
         return;
       }
 
-      // Faqat printable char
+      // Faqat printable char (raqam, harf)
       if (e.key.length !== 1) return;
 
-      // Agar gap < 80ms yoki buffer to'lgan bo'lsa — skaner
-      if (gap < 80 || scanBuf.current.length > 0) {
+      // Buffer bo'sh bo'lsa — birinchi harf: skaner bo'lishi mumkin,
+      // shuning uchun har doim buffer'ga qo'shamiz.
+      // Keyingi harflar tez (< 80ms) kelsa — skaner.
+      // Buffer'da narsa bo'lsa — davomi skaner.
+      const isScanner = scanBuf.current.length > 0 || gap < 80;
+
+      if (isScanner) {
         scanBuf.current += e.key;
         if (scanTimer.current) clearTimeout(scanTimer.current);
-        scanTimer.current = setTimeout(() => { scanBuf.current = ''; }, 400);
+        // 300ms ichida Enter kelmasa — buffer tozalanadi
+        scanTimer.current = setTimeout(() => {
+          scanBuf.current = '';
+        }, 300);
       }
     };
 
@@ -429,6 +435,8 @@ export default function PosPage() {
     return () => {
       window.removeEventListener('keydown', onKey);
       if (scanTimer.current) clearTimeout(scanTimer.current);
+    };
+  }, [products, dishes, showPay, addProduct, addDish]);
     };
   }, [products, dishes, showPay, addProduct, addDish]);
 
