@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 
 export async function GET() {
   try {
-    // Low stock products
-    const lowStock = await prisma.product.findMany({
-      where: {
-        OR: [
-          { quantity: { lte: prisma.product.fields.minQuantity } },
-          { quantity: 0 },
-        ],
-      },
+    // Get all products, then filter in JavaScript
+    const allProducts = await prisma.product.findMany({
       select: {
         id: true,
         name: true,
@@ -18,8 +12,10 @@ export async function GET() {
         minQuantity: true,
         unit: true,
       },
-      orderBy: { quantity: 'asc' },
     });
+
+    // Low stock: quantity <= minQuantity
+    const lowStock = allProducts.filter(p => p.quantity <= p.minQuantity);
 
     // Expiring soon products (within 7 days)
     const sevenDaysFromNow = new Date();
