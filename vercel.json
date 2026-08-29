@@ -1,25 +1,14 @@
 {
-  "buildCommand": "rm -rf .next node_modules/.cache && npm run build",
+  "buildCommand": "npx rimraf .next node_modules/.cache && npm run build",
   "outputDirectory": ".next",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["cdg1"],
   "crons": [],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, must-revalidate"
-        }
-      ]
-    }
-  ],
   "env": {
     "NEXTAUTH_SECRET": "@nextauth-secret",
     "DATABASE_URL": "@database-url",
-    "FORCE_FRESH_BUILD": "20260829140000"
+    "NEXT_PUBLIC_BUILD_TIME": "2026-08-29T14:15:00Z"
   }
 }
