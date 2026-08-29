@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
         price:    Number(price),
         barcode:  barcode?.trim() || null,
         isActive: true,
+        branchId: 'default-branch',
       },
     });
     return NextResponse.json(dish, { status: 201 });

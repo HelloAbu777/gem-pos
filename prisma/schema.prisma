@@ -163,9 +163,10 @@ model LegalEntity {
 model Dish {
   id        String   @id @default(cuid())
   name      String
-  price     Float    // Sotish narxi
+  price     Float
   barcode   String?  @unique
   isActive  Boolean  @default(true)
+  branchId  String   @default("default-branch")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
