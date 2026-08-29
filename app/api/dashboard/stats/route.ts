@@ -4,57 +4,43 @@ import { getSession } from '@/lib/auth/session';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
+    const endDate   = searchParams.get('endDate');
 
     if (!startDate || !endDate) {
-      return NextResponse.json({ error: 'Start and end dates are required' }, { status: 400 });
+      return NextResponse.json({ error: 'startDate va endDate kerak' }, { status: 400 });
     }
 
+    // Session ixtiyoriy — bo'lmasa barcha branchlar
+    const session  = await getSession();
+    const branchId = session?.branchId;
+
     const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999); // Oxirgi kunning tugashiga qadar
+    const end   = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
 
-    // Tanlangan davr uchun sotuvlar
-    const sales = await prisma.sale.findMany({
-      where: {
-        branchId: session.branchId,
-        createdAt: {
-          gte: start,
-          lte: end,
-        },
-      },
-      include: {
-        saleItems: {
-          include: {
-            product: true,
-          },
-        },
-      },
-    });
+    const whereBase = {
+      createdAt: { gte: start, lte: end },
+      ...(branchId ? { branchId } : {}),
+    };
 
-    // Oldingi davr uchun sotuvlar (taqqoslash uchun)
-    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const previousStart = new Date(start);
-    previousStart.setDate(previousStart.getDate() - daysDiff);
-    const previousEnd = new Date(end);
-    previousEnd.setDate(previousEnd.getDate() - daysDiff);
-
-    const previousSales = await prisma.sale.findMany({
-      where: {
-        branchId: session.branchId,
-        createdAt: {
-          gte: previousStart,
-          lte: previousEnd,
+    const [sales, previousSales] = await Promise.all([
+      prisma.sale.findMany({
+        where: whereBase,
+        include: {
+          saleItems: { include: { product: true } },
         },
-      },
-    });
+      }),
+      prisma.sale.findMany({
+        where: (() => {
+          const daysDiff = Math.ceil((end.getTime() - start.getTime()) / 86400000);
+          const ps = new Date(start); ps.setDate(ps.getDate() - daysDiff);
+          const pe = new Date(end);   pe.setDate(pe.getDate() - daysDiff);
+          return { createdAt: { gte: ps, lte: pe }, ...(branchId ? { branchId } : {}) };
+        })(),
+      }),
+    ]);
 
     // Hisob-kitoblar
     const totalRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);

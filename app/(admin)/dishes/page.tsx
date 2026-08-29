@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, X, UtensilsCrossed, Search, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, UtensilsCrossed, Search, ToggleLeft, ToggleRight, Printer } from 'lucide-react';
 
 interface Dish {
   id: string;
@@ -13,6 +13,44 @@ interface Dish {
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+
+/* ── Barcode Print ── */
+function printBarcode(name: string, barcode: string, price: number) {
+  const w = window.open('', '_blank', 'width=400,height=300');
+  if (!w) return;
+  w.document.write(`
+    <!DOCTYPE html><html><head><title>Barcode</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#fff; font-family:monospace; }
+      .label { border:1px solid #ccc; padding:10px 14px; width:200px; text-align:center; }
+      .name  { font-size:11px; font-weight:bold; margin-bottom:6px; word-break:break-word; }
+      .code  { font-size:18px; letter-spacing:2px; font-family:monospace; margin:4px 0; }
+      .price { font-size:13px; font-weight:bold; margin-top:6px; }
+      .bars  { display:flex; justify-content:center; align-items:flex-end; gap:1px; margin:6px 0; height:40px; }
+      .bar   { background:#000; }
+    </style></head><body>
+    <div class="label">
+      <div class="name">${name}</div>
+      <div class="bars" id="bars"></div>
+      <div class="code">${barcode}</div>
+      <div class="price">${fmt(price)} so'm</div>
+    </div>
+    <script>
+      const bars = document.getElementById('bars');
+      const widths = [3,2,1,2,3,1,2,1,3,2,1,2,1,3,2];
+      for(let i=0;i<'${barcode}'.length*3+15;i++){
+        const b=document.createElement('div');
+        b.className='bar';
+        const w=widths[i%widths.length];
+        b.style.width=(i%2===0?w:w-1)+'px';
+        b.style.height=(30+((i*7)%12))+'px';
+        bars.appendChild(b);
+      }
+      window.onload = () => { window.print(); window.close(); };
+    </script></body></html>`);
+  w.document.close();
+}
 
 /* ── Modal ── */
 function DishModal({
@@ -296,9 +334,18 @@ export default function DishesPage() {
                   {/* Barcode */}
                   <td className="px-5 py-4">
                     {dish.barcode ? (
-                      <span className="font-mono text-sm text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md">
-                        {dish.barcode}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md">
+                          {dish.barcode}
+                        </span>
+                        <button
+                          onClick={() => printBarcode(dish.name, dish.barcode!, dish.price)}
+                          className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                          title="Chop etish"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-gray-400 text-sm">—</span>
                     )}
