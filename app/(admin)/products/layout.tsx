@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const tabs = [
-  { name: 'Mahsulotlar', href: '/products' },
+  { name: 'Mahsulotlar',   href: '/products' },
   { name: 'Kategoriyalar', href: '/products/categories' },
+  { name: 'Taminotchilar', href: '/products/suppliers' },
   { name: 'Tovar hisoboti', href: '/products/report' },
 ];
 

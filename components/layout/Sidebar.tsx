@@ -5,10 +5,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Package, 
-  Users, 
   BarChart3, 
   ShoppingCart,
   Building2,
+  UtensilsCrossed,
   LogOut 
 } from 'lucide-react';
 import { useState } from 'react';
@@ -16,7 +16,7 @@ import { useState } from 'react';
 const menuItems = [
   { name: 'Dashboard',        href: '/dashboard',       icon: LayoutDashboard },
   { name: 'Mahsulotlar',      href: '/products',        icon: Package },
-  { name: 'Taminotchilar',    href: '/suppliers',       icon: Users },
+  { name: 'Taomlar',          href: '/dishes',          icon: UtensilsCrossed },
   { name: 'Yuridik Shaxslar', href: '/legal-entities',  icon: Building2 },
   { name: 'Statistika',       href: '/statistics',      icon: BarChart3 },
   { name: 'Kassa (POS)',      href: '/pos',             icon: ShoppingCart },
@@ -50,7 +50,9 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+          const isActive = pathname === item.href || 
+            (item.href !== '/products' && pathname?.startsWith(item.href + '/')) ||
+            (item.href === '/products' && (pathname === '/products' || pathname?.startsWith('/products/')));
           
           return (
             <Link
