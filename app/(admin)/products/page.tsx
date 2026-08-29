@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Search, X, Package, Tag, Truck, Calendar,
   AlertTriangle, Barcode, Pencil, Trash2, Printer,
@@ -17,19 +17,6 @@ interface Product {
   vatType: string; expiryDate?: string | null;
   category: Category; supplier: Supplier; createdAt: string;
 }
-interface FormData {
-  name: string; barcode: string; unit: string;
-  quantity: string; minQuantity: string;
-  purchasePrice: string; salePrice: string;
-  vatType: string; expiryDate: string;
-  categoryId: string; supplierId: string;
-}
-
-const EMPTY_FORM: FormData = {
-  name: '', barcode: '', unit: 'dona', quantity: '0', minQuantity: '10',
-  purchasePrice: '', salePrice: '', vatType: 'NO_VAT', expiryDate: '',
-  categoryId: '', supplierId: '',
-};
 
 const fmt     = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -73,7 +60,10 @@ function DetailModal({ product, onClose, onPrint }: {
                 expiryDays <= 0 ? 'text-red-600 bg-red-50 border-red-200' :
                 expiryDays <= 7 ? 'text-orange-600 bg-orange-50 border-orange-200' :
                 'text-gray-600 bg-gray-50 border-gray-200'
-              }`}><Calendar className="w-3 h-3 inline mr-1" />{expiryDays <= 0 ? "Muddati o'tgan" : `${expiryDays} kun qoldi`}</span>
+              }`}>
+                <Calendar className="w-3 h-3 inline mr-1" />
+                {expiryDays <= 0 ? "Muddati o'tgan" : `${expiryDays} kun qoldi`}
+              </span>
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -88,13 +78,13 @@ function DetailModal({ product, onClose, onPrint }: {
           </div>
           <div className="border border-gray-200 rounded-xl divide-y divide-gray-100 text-sm">
             {[
-              { icon: Barcode,  label: 'Shtrix kod',    val: product.barcode ? <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">{product.barcode}</span> : '—' },
-              { icon: Tag,      label: 'Kategoriya',    val: product.category.name },
-              { icon: Truck,    label: "Ta'minotchi",   val: product.supplier.name },
-              { icon: Package,  label: "O'lchov",       val: product.unit },
-              { icon: Package,  label: 'Soliq',         val: VAT_LABELS[product.vatType] ?? product.vatType },
+              { icon: Barcode,  label: 'Shtrix kod',   val: product.barcode ? <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">{product.barcode}</span> : '—' },
+              { icon: Tag,      label: 'Kategoriya',   val: product.category.name },
+              { icon: Truck,    label: "Ta'minotchi",  val: product.supplier.name },
+              { icon: Package,  label: "O'lchov",      val: product.unit },
+              { icon: Package,  label: 'Soliq',        val: VAT_LABELS[product.vatType] ?? product.vatType },
               ...(product.expiryDate ? [{ icon: Calendar, label: 'Muddat', val: fmtDate(product.expiryDate) }] : []),
-              { icon: Calendar, label: "Qo'shilgan",   val: fmtDate(product.createdAt) },
+              { icon: Calendar, label: "Qo'shilgan",  val: fmtDate(product.createdAt) },
             ].map(({ icon: Icon, label, val }, i) => (
               <div key={i} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-2 text-gray-500"><Icon className="w-4 h-4" />{label}</div>
@@ -117,48 +107,72 @@ function DetailModal({ product, onClose, onPrint }: {
   );
 }
 
-/* ── Add / Edit Modal ── */
+/* ── Add / Edit Modal ─────────────────────────────────────────────
+   MUHIM: Har bir maydon uchun alohida useState ishlatiladi.
+   Buning sababi: bitta `form` obyekti bilan setForm() chaqirilganda
+   komponent qayta render bo'lib, autoFocus focus'ni o'g'irlaydi.
+   Alohida state'lar bilan faqat tegishli input re-render bo'ladi.
+───────────────────────────────────────────────────────────────── */
 function ProductModal({ open, onClose, onSave, initial, categories, suppliers }: {
   open: boolean; onClose: () => void;
-  onSave: (data: FormData) => Promise<void>;
+  onSave: (data: {
+    name: string; barcode: string; unit: string; quantity: string;
+    minQuantity: string; purchasePrice: string; salePrice: string;
+    vatType: string; expiryDate: string; categoryId: string; supplierId: string;
+  }) => Promise<void>;
   initial?: Product | null;
   categories: Category[]; suppliers: Supplier[];
 }) {
-  const [form,   setForm]   = useState<FormData>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState('');
+  const [name,          setName]          = useState('');
+  const [barcode,       setBarcode]       = useState('');
+  const [purchasePrice, setPurchasePrice] = useState('');
+  const [salePrice,     setSalePrice]     = useState('');
+  const [quantity,      setQuantity]      = useState('0');
+  const [minQuantity,   setMinQuantity]   = useState('10');
+  const [unit,          setUnit]          = useState('dona');
+  const [vatType,       setVatType]       = useState('NO_VAT');
+  const [categoryId,    setCategoryId]    = useState('');
+  const [supplierId,    setSupplierId]    = useState('');
+  const [expiryDate,    setExpiryDate]    = useState('');
+  const [saving,        setSaving]        = useState(false);
+  const [error,         setError]         = useState('');
+  const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) {
-      setError('');
-      setForm(initial ? {
-        name:          initial.name,
-        barcode:       initial.barcode ?? '',
-        unit:          initial.unit,
-        quantity:      String(initial.quantity),
-        minQuantity:   String(initial.minQuantity),
-        purchasePrice: String(initial.purchasePrice),
-        salePrice:     String(initial.salePrice),
-        vatType:       initial.vatType,
-        expiryDate:    initial.expiryDate ? initial.expiryDate.split('T')[0] : '',
-        categoryId:    initial.category.id,
-        supplierId:    initial.supplier.id,
-      } : EMPTY_FORM);
+    if (!open) return;
+    setError('');
+    if (initial) {
+      setName(initial.name);
+      setBarcode(initial.barcode ?? '');
+      setPurchasePrice(String(initial.purchasePrice));
+      setSalePrice(String(initial.salePrice));
+      setQuantity(String(initial.quantity));
+      setMinQuantity(String(initial.minQuantity));
+      setUnit(initial.unit);
+      setVatType(initial.vatType);
+      setCategoryId(initial.category.id);
+      setSupplierId(initial.supplier.id);
+      setExpiryDate(initial.expiryDate ? initial.expiryDate.split('T')[0] : '');
+    } else {
+      setName(''); setBarcode(''); setPurchasePrice(''); setSalePrice('');
+      setQuantity('0'); setMinQuantity('10'); setUnit('dona');
+      setVatType('NO_VAT'); setCategoryId(''); setSupplierId(''); setExpiryDate('');
     }
+    setTimeout(() => nameRef.current?.focus(), 60);
   }, [open, initial]);
-
-  const set = (k: keyof FormData, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
     setError('');
-    if (!form.name.trim())   { setError('Nom kiritilmagan'); return; }
-    if (!form.purchasePrice) { setError('Kelish narxi kiritilmagan'); return; }
-    if (!form.salePrice)     { setError('Sotish narxi kiritilmagan'); return; }
-    if (!form.categoryId)    { setError('Kategoriya tanlanmagan'); return; }
-    if (!form.supplierId)    { setError("Ta'minotchi tanlanmagan"); return; }
+    if (!name.trim())    { setError('Nom kiritilmagan'); return; }
+    if (!purchasePrice)  { setError('Kelish narxi kiritilmagan'); return; }
+    if (!salePrice)      { setError('Sotish narxi kiritilmagan'); return; }
+    if (!categoryId)     { setError('Kategoriya tanlanmagan'); return; }
+    if (!supplierId)     { setError("Ta'minotchi tanlanmagan"); return; }
     setSaving(true);
-    try { await onSave(form); onClose(); }
-    catch (e: unknown) { setError(e instanceof Error ? e.message : 'Xatolik'); }
+    try {
+      await onSave({ name, barcode, purchasePrice, salePrice, quantity, minQuantity, unit, vatType, categoryId, supplierId, expiryDate });
+      onClose();
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Xatolik'); }
     finally { setSaving(false); }
   };
 
@@ -167,68 +181,103 @@ function ProductModal({ open, onClose, onSave, initial, categories, suppliers }:
   const inp = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none";
   const F = ({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) => (
     <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}{req && <span className="text-red-500 ml-0.5">*</span>}</label>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">
+        {label}{req && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
       {children}
     </div>
   );
+
+  const margin = Number(salePrice) - Number(purchasePrice);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="font-bold text-gray-900">{initial ? 'Mahsulotni tahrirlash' : 'Yangi mahsulot qo\'shish'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+          <h2 className="font-bold text-gray-900">
+            {initial ? 'Mahsulotni tahrirlash' : "Yangi mahsulot qo'shish"}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
         </div>
         <div className="p-6 grid grid-cols-2 gap-4 overflow-y-auto max-h-[70vh]">
-          <F label="Nomi" req><input autoFocus className={inp} value={form.name} onChange={e => set('name', e.target.value)} placeholder="Mahsulot nomi" /></F>
-          <F label="Shtrix kod"><input className={`${inp} font-mono`} value={form.barcode} onChange={e => set('barcode', e.target.value)} placeholder="4780068020047" /></F>
-          <F label="Kelish narxi (so'm)" req><input type="number" className={inp} value={form.purchasePrice} onChange={e => set('purchasePrice', e.target.value)} placeholder="0" /></F>
-          <F label="Sotish narxi (so'm)" req><input type="number" className={inp} value={form.salePrice} onChange={e => set('salePrice', e.target.value)} placeholder="0" /></F>
-          <F label="Miqdor"><input type="number" className={inp} value={form.quantity} onChange={e => set('quantity', e.target.value)} /></F>
-          <F label="Minimal zaxira"><input type="number" className={inp} value={form.minQuantity} onChange={e => set('minQuantity', e.target.value)} /></F>
+          <F label="Nomi" req>
+            <input ref={nameRef} className={inp}
+              value={name} onChange={e => setName(e.target.value)} placeholder="Mahsulot nomi" />
+          </F>
+          <F label="Shtrix kod">
+            <input className={`${inp} font-mono`}
+              value={barcode} onChange={e => setBarcode(e.target.value)} placeholder="4780068020047" />
+          </F>
+          <F label="Kelish narxi (so'm)" req>
+            <input type="number" className={inp}
+              value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} placeholder="0" />
+          </F>
+          <F label="Sotish narxi (so'm)" req>
+            <input type="number" className={inp}
+              value={salePrice} onChange={e => setSalePrice(e.target.value)} placeholder="0" />
+          </F>
+          <F label="Miqdor">
+            <input type="number" className={inp}
+              value={quantity} onChange={e => setQuantity(e.target.value)} />
+          </F>
+          <F label="Minimal zaxira">
+            <input type="number" className={inp}
+              value={minQuantity} onChange={e => setMinQuantity(e.target.value)} />
+          </F>
           <F label="O'lchov birligi">
-            <select className={inp} value={form.unit} onChange={e => set('unit', e.target.value)}>
+            <select className={inp} value={unit} onChange={e => setUnit(e.target.value)}>
               <option>dona</option><option>kg</option><option>litr</option><option>metr</option>
             </select>
           </F>
           <F label="Soliq">
-            <select className={inp} value={form.vatType} onChange={e => set('vatType', e.target.value)}>
-              <option value="NO_VAT">Soliqsiz</option><option value="STANDARD">Standart</option><option value="ZERO_VAT">0%</option>
+            <select className={inp} value={vatType} onChange={e => setVatType(e.target.value)}>
+              <option value="NO_VAT">Soliqsiz</option>
+              <option value="STANDARD">Standart</option>
+              <option value="ZERO_VAT">0%</option>
             </select>
           </F>
           <F label="Kategoriya" req>
-            <select className={inp} value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
+            <select className={inp} value={categoryId} onChange={e => setCategoryId(e.target.value)}>
               <option value="">— Tanlang —</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </F>
           <F label="Ta'minotchi" req>
-            <select className={inp} value={form.supplierId} onChange={e => set('supplierId', e.target.value)}>
+            <select className={inp} value={supplierId} onChange={e => setSupplierId(e.target.value)}>
               <option value="">— Tanlang —</option>
               {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </F>
           <F label="Yaroqlilik muddati">
-            <input type="date" className={inp} value={form.expiryDate} onChange={e => set('expiryDate', e.target.value)} />
+            <input type="date" className={inp}
+              value={expiryDate} onChange={e => setExpiryDate(e.target.value)} />
           </F>
           <div className="col-span-2">
-            {form.purchasePrice && form.salePrice && (
+            {purchasePrice && salePrice && (
               <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2.5 text-sm">
                 <span className="text-gray-500">Marja: </span>
-                <span className="font-bold text-blue-700">+{fmt(Number(form.salePrice) - Number(form.purchasePrice))} so&apos;m</span>
-                {Number(form.purchasePrice) > 0 && (
+                <span className="font-bold text-blue-700">+{fmt(margin)} so&apos;m</span>
+                {Number(purchasePrice) > 0 && (
                   <span className="text-blue-500 ml-2">
-                    ({((Number(form.salePrice) - Number(form.purchasePrice)) / Number(form.purchasePrice) * 100).toFixed(1)}%)
+                    ({(margin / Number(purchasePrice) * 100).toFixed(1)}%)
                   </span>
                 )}
               </div>
             )}
           </div>
-          {error && <p className="col-span-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          {error && (
+            <p className="col-span-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+          )}
         </div>
         <div className="flex gap-3 px-6 pb-5">
-          <button onClick={onClose} disabled={saving} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">Bekor qilish</button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
+          <button onClick={onClose} disabled={saving}
+            className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+            Bekor qilish
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
             {saving ? 'Saqlanmoqda...' : 'Saqlash'}
           </button>
         </div>
@@ -268,7 +317,11 @@ export default function ProductsPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleSave = async (form: FormData, id?: string) => {
+  const handleSave = async (form: {
+    name: string; barcode: string; unit: string; quantity: string;
+    minQuantity: string; purchasePrice: string; salePrice: string;
+    vatType: string; expiryDate: string; categoryId: string; supplierId: string;
+  }, id?: string) => {
     const url    = id ? `/api/products/${id}` : '/api/products';
     const method = id ? 'PUT' : 'POST';
     const res    = await fetch(url, {
@@ -288,7 +341,9 @@ export default function ProductsPage() {
 
   const filtered = products.filter(p => {
     const ms = p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode ?? '').toLowerCase().includes(search.toLowerCase());
-    const mf = statusFilter === 'all' || (statusFilter === 'low' && p.quantity <= p.minQuantity && p.quantity > 0) || (statusFilter === 'out' && p.quantity === 0);
+    const mf = statusFilter === 'all'
+      || (statusFilter === 'low' && p.quantity <= p.minQuantity && p.quantity > 0)
+      || (statusFilter === 'out' && p.quantity === 0);
     return ms && mf;
   });
 
@@ -360,7 +415,6 @@ export default function ProductsPage() {
                     ? Math.ceil((new Date(p.expiryDate).getTime() - Date.now()) / 86400000) : null;
                   return (
                     <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                      {/* Nom */}
                       <td className="px-4 py-3 cursor-pointer" onClick={() => setSelected(p)}>
                         <p className="font-semibold text-gray-900 text-sm hover:text-blue-600 transition-colors">{p.name}</p>
                         {p.expiryDate && expiryDays !== null && (
@@ -369,40 +423,32 @@ export default function ProductsPage() {
                           </p>
                         )}
                       </td>
-                      {/* Shtrix kod */}
                       <td className="px-4 py-3">
                         {p.barcode ? (
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-1 rounded-md">{p.barcode}</span>
                             <button onClick={() => setPrintTarget(p)}
-                              className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" title="Chop etish">
+                              className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors">
                               <Printer className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        ) : (
-                          <span className="text-gray-300 text-xs">—</span>
-                        )}
+                        ) : <span className="text-gray-300 text-xs">—</span>}
                       </td>
-                      {/* Kategoriya */}
                       <td className="px-4 py-3 hidden md:table-cell">
                         <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{p.category.name}</span>
                       </td>
-                      {/* Kelish */}
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-gray-500">{fmt(p.purchasePrice)}</span>
                         <span className="text-xs text-gray-400 ml-0.5">so&apos;m</span>
                       </td>
-                      {/* Sotish */}
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-bold text-gray-900">{fmt(p.salePrice)}</span>
                         <span className="text-xs text-gray-400 ml-0.5">so&apos;m</span>
                       </td>
-                      {/* Marja */}
                       <td className="px-4 py-3 text-right hidden lg:table-cell">
                         <span className="text-sm font-semibold text-green-600">+{fmt(margin)}</span>
                         <span className="text-xs text-gray-400 ml-1">({mPct}%)</span>
                       </td>
-                      {/* Zaxira */}
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {(isLow || isOut) && <AlertTriangle className={`w-3.5 h-3.5 ${isOut ? 'text-red-500' : 'text-orange-400'}`} />}
@@ -410,19 +456,15 @@ export default function ProductsPage() {
                           <span className="text-xs text-gray-400">{p.unit}</span>
                         </div>
                       </td>
-                      {/* Amallar */}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => setSelected(p)}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Ko'rish">
+                          <button onClick={() => setSelected(p)} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
                             <Barcode className="w-4 h-4" />
                           </button>
-                          <button onClick={() => setEditTarget(p)}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Tahrirlash">
+                          <button onClick={() => setEditTarget(p)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                             <Pencil className="w-4 h-4" />
                           </button>
-                          <button onClick={() => { setDeleteId(p.id); setDeleteError(''); }}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="O'chirish">
+                          <button onClick={() => { setDeleteId(p.id); setDeleteError(''); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -438,26 +480,19 @@ export default function ProductsPage() {
 
       {/* Detail Modal */}
       {selected && (
-        <DetailModal
-          product={selected}
-          onClose={() => setSelected(null)}
-          onPrint={() => { setPrintTarget(selected); setSelected(null); }}
-        />
+        <DetailModal product={selected} onClose={() => setSelected(null)}
+          onPrint={() => { setPrintTarget(selected); setSelected(null); }} />
       )}
 
       {/* Add Modal */}
-      <ProductModal
-        open={addOpen} onClose={() => setAddOpen(false)}
+      <ProductModal open={addOpen} onClose={() => setAddOpen(false)}
         onSave={form => handleSave(form)}
-        categories={categories} suppliers={suppliers}
-      />
+        categories={categories} suppliers={suppliers} />
 
       {/* Edit Modal */}
-      <ProductModal
-        open={!!editTarget} onClose={() => setEditTarget(null)}
+      <ProductModal open={!!editTarget} onClose={() => setEditTarget(null)}
         onSave={form => handleSave(form, editTarget!.id)}
-        initial={editTarget} categories={categories} suppliers={suppliers}
-      />
+        initial={editTarget} categories={categories} suppliers={suppliers} />
 
       {/* Delete Confirm */}
       {deleteId && (
@@ -476,10 +511,8 @@ export default function ProductsPage() {
 
       {/* Barcode Print Modal */}
       <BarcodePrintModal
-        open={!!printTarget}
-        onClose={() => setPrintTarget(null)}
-        name={printTarget?.name ?? ''}
-        barcode={printTarget?.barcode ?? ''}
+        open={!!printTarget} onClose={() => setPrintTarget(null)}
+        name={printTarget?.name ?? ''} barcode={printTarget?.barcode ?? ''}
         price={printTarget?.salePrice ?? 0}
       />
     </div>

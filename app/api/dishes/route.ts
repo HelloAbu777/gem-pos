@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(dish, { status: 201 });
   } catch (error) {
     console.error('Dish POST error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: 'Server xatosi', details: msg }, { status: 500 });
   }
 }
