@@ -12,144 +12,126 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'startDate va endDate kerak' }, { status: 400 });
     }
 
-    // Session ixtiyoriy — bo'lmasa barcha branchlar
     const session  = await getSession();
-    const branchId = session?.branchId;
+    const branchId = session?.branchId ?? null;
 
     const start = new Date(startDate);
     const end   = new Date(endDate);
     end.setHours(23, 59, 59, 999);
 
-    const whereBase = {
-      createdAt: { gte: start, lte: end },
-      ...(branchId ? { branchId } : {}),
-    };
+    // Previous period dates
+    const daysDiff = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+    const prevStart = new Date(start);
+    prevStart.setDate(prevStart.getDate() - daysDiff);
+    const prevEnd = new Date(end);
+    prevEnd.setDate(prevEnd.getDate() - daysDiff);
 
+    const whereBase  = { createdAt: { gte: start, lte: end },  ...(branchId ? { branchId } : {}) };
+    const wherePrev  = { createdAt: { gte: prevStart, lte: prevEnd }, ...(branchId ? { branchId } : {}) };
+
+    // Fetch sales — include saleItems but NOT product (may cause issues)
     const [sales, previousSales] = await Promise.all([
       prisma.sale.findMany({
         where: whereBase,
         include: {
-          saleItems: { include: { product: true } },
+          saleItems: {
+            select: {
+              productId:   true,
+              itemName:    true,
+              quantity:    true,
+              priceAtSale: true,
+              product: {
+                select: { name: true, purchasePrice: true },
+              },
+            },
+          },
         },
       }),
-      prisma.sale.findMany({
-        where: (() => {
-          const daysDiff = Math.ceil((end.getTime() - start.getTime()) / 86400000);
-          const ps = new Date(start); ps.setDate(ps.getDate() - daysDiff);
-          const pe = new Date(end);   pe.setDate(pe.getDate() - daysDiff);
-          return { createdAt: { gte: ps, lte: pe }, ...(branchId ? { branchId } : {}) };
-        })(),
-      }),
+      prisma.sale.findMany({ where: wherePrev, select: { totalAmount: true } }),
     ]);
 
-    // Hisob-kitoblar
-    const totalRevenue = sales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-    const cashRevenue = sales
-      .filter((s) => s.paymentType === 'CASH')
-      .reduce((sum, sale) => sum + (sale.cashAmount || sale.totalAmount), 0);
-    
-    const cardRevenue = sales
-      .filter((s) => s.paymentType === 'CARD')
-      .reduce((sum, sale) => sum + (sale.cardAmount || sale.totalAmount), 0);
+    // Revenue
+    const totalRevenue = sales.reduce((s, x) => s + x.totalAmount, 0);
 
-    const mixedCash = sales
-      .filter((s) => s.paymentType === 'MIXED')
-      .reduce((sum, sale) => sum + (sale.cashAmount || 0), 0);
-    
-    const mixedCard = sales
-      .filter((s) => s.paymentType === 'MIXED')
-      .reduce((sum, sale) => sum + (sale.cardAmount || 0), 0);
+    const totalCash = sales.reduce((s, x) => {
+      if (x.paymentType === 'CASH')  return s + (x.cashAmount ?? x.totalAmount);
+      if (x.paymentType === 'MIXED') return s + (x.cashAmount ?? 0);
+      return s;
+    }, 0);
 
-    const totalCash = cashRevenue + mixedCash;
-    const totalCard = cardRevenue + mixedCard;
+    const totalCard = sales.reduce((s, x) => {
+      if (x.paymentType === 'CARD')  return s + (x.cardAmount ?? x.totalAmount);
+      if (x.paymentType === 'MIXED') return s + (x.cardAmount ?? 0);
+      return s;
+    }, 0);
 
-    // Sof foyda hisoblash (faqat mahsulotlar, taomlar uchun purchasePrice 0)
+    // Net profit (only product items have purchasePrice)
     let totalCost = 0;
-    sales.forEach((sale) => {
-      sale.saleItems.forEach((item) => {
-        if (item.product) {
+    for (const sale of sales) {
+      for (const item of sale.saleItems) {
+        if (item.product?.purchasePrice) {
           totalCost += item.product.purchasePrice * item.quantity;
         }
-      });
-    });
+      }
+    }
     const netProfit = totalRevenue - totalCost;
 
-    // Oldingi davr bilan taqqoslash
-    const previousRevenue = previousSales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-    const revenueChange = previousRevenue > 0 
-      ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 
-      : 0;
+    // Change vs previous
+    const prevRevenue   = previousSales.reduce((s, x) => s + x.totalAmount, 0);
+    const revenueChange = prevRevenue > 0
+      ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0;
 
-    // Y/Sh (Yuridik shaxs) statistika
-    const leSales   = sales.filter(s => s.saleType === 'LEGAL_ENTITY');
-    const leRevenue = leSales.reduce((sum, s) => sum + s.totalAmount, 0);
+    // Y/Sh — safe access with optional chaining
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const leSales   = sales.filter(s => (s as any).saleType === 'LEGAL_ENTITY');
+    const leRevenue = leSales.reduce((s, x) => s + x.totalAmount, 0);
     const leCount   = leSales.length;
 
-    // Eng ko'p sotilgan mahsulotlar (faqat productId bo'lganlar)
-    const productSales: { [key: string]: { name: string; quantity: number; revenue: number } } = {};
-    
-    sales.forEach((sale) => {
-      sale.saleItems.forEach((item) => {
-        if (!item.productId || !item.product) return;
-        if (!productSales[item.productId]) {
-          productSales[item.productId] = {
-            name: item.product.name,
-            quantity: 0,
-            revenue: 0,
-          };
-        }
-        productSales[item.productId].quantity += item.quantity;
-        productSales[item.productId].revenue += item.priceAtSale * item.quantity;
-      });
-    });
-
-    const topProducts = Object.values(productSales)
+    // Top selling products
+    const prodMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
+    for (const sale of sales) {
+      for (const item of sale.saleItems) {
+        if (!item.productId) continue;
+        const nm = item.product?.name ?? item.itemName;
+        if (!prodMap[item.productId]) prodMap[item.productId] = { name: nm, quantity: 0, revenue: 0 };
+        prodMap[item.productId].quantity += item.quantity;
+        prodMap[item.productId].revenue  += item.priceAtSale * item.quantity;
+      }
+    }
+    const topProducts = Object.values(prodMap)
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
 
-    // Kunlik sotuvlar (grafik uchun)
+    // Daily sales chart
     const dailySales: { date: string; revenue: number }[] = [];
-    const currentDate = new Date(start);
-    
-    while (currentDate <= end) {
-      const dayStart = new Date(currentDate);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(currentDate);
-      dayEnd.setHours(23, 59, 59, 999);
-
-      const daySales = sales.filter(
-        (sale) => sale.createdAt >= dayStart && sale.createdAt <= dayEnd
-      );
-      
-      const dayRevenue = daySales.reduce((sum, sale) => sum + sale.totalAmount, 0);
-      
-      dailySales.push({
-        date: currentDate.toISOString().split('T')[0],
-        revenue: dayRevenue,
-      });
-
-      currentDate.setDate(currentDate.getDate() + 1);
+    const cur = new Date(start);
+    while (cur <= end) {
+      const ds = new Date(cur); ds.setHours(0, 0, 0, 0);
+      const de = new Date(cur); de.setHours(23, 59, 59, 999);
+      const rev = sales
+        .filter(s => s.createdAt >= ds && s.createdAt <= de)
+        .reduce((s, x) => s + x.totalAmount, 0);
+      dailySales.push({ date: cur.toISOString().split('T')[0], revenue: rev });
+      cur.setDate(cur.getDate() + 1);
     }
 
     return NextResponse.json({
       stats: {
-        totalRevenue,
-        totalCash,
-        totalCard,
-        netProfit,
-        revenueChange,
-        salesCount: sales.length,
-        // Y/Sh statistika
-        legalEntityRevenue: leRevenue,
-        legalEntityCount:   leCount,
-        retailRevenue:      totalRevenue - leRevenue,
-        retailCount:        sales.length - leCount,
+        totalRevenue, totalCash, totalCard,
+        netProfit, revenueChange,
+        salesCount:          sales.length,
+        legalEntityRevenue:  leRevenue,
+        legalEntityCount:    leCount,
+        retailRevenue:       totalRevenue - leRevenue,
+        retailCount:         sales.length - leCount,
       },
       topProducts,
       dailySales,
     });
+
   } catch (error) {
     console.error('Dashboard stats error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: 'Server xatosi', details: msg }, { status: 500 });
   }
 }
