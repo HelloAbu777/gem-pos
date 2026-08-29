@@ -375,28 +375,3 @@ export default function DishesPage() {
     </div>
   );
 }
-      {/* Delete confirm */}
-      {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">O&apos;chirishni tasdiqlang</h3>
-            <p className="text-sm text-gray-500 mb-6">Bu taom o&apos;chiriladi va kassada ko&apos;rinmaydi.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteId(null)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">Bekor qilish</button>
-              <button onClick={() => handleDelete(deleteId)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">O&apos;chirish</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Barcode Print Modal */}
-      <BarcodePrintModal
-        open={!!printTarget}
-        onClose={() => setPrintTarget(null)}
-        name={printTarget?.name ?? ''}
-        barcode={printTarget?.barcode ?? ''}
-        price={printTarget?.price ?? 0}
-      />
-    </div>
-  );
-}
