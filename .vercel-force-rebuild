@@ -1,0 +1,4 @@
+Force rebuild timestamp: 2026-08-29T07:45:00Z
+Previous: 20260828170656
+Current: 20260829074500
+Reason: Dish model integration not visible in production despite successful git push
