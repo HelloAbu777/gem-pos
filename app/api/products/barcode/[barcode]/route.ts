@@ -5,7 +5,7 @@ import { getSession } from '@/lib/auth/session';
 // GET - Barcode orqali mahsulot qidirish (Real Database)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { barcode: string } }
+  context: { params: Promise<{ barcode: string }> }
 ) {
   try {
     // Session tekshiruvi
@@ -17,6 +17,7 @@ export async function GET(
       );
     }
 
+    const params = await context.params;
     const barcode = params.barcode;
 
     console.log('🔍 Barcode qidiruv boshlandi:', barcode); // DEBUG
