@@ -8,16 +8,18 @@ import {
   Users, 
   BarChart3, 
   ShoppingCart,
+  Building2,
   LogOut 
 } from 'lucide-react';
 import { useState } from 'react';
 
 const menuItems = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Mahsulotlar', href: '/products', icon: Package },
-  { name: 'Taminotchilar', href: '/suppliers', icon: Users },
-  { name: 'Statistika', href: '/statistics', icon: BarChart3 },
-  { name: 'Kassa (POS)', href: '/pos', icon: ShoppingCart },
+  { name: 'Dashboard',        href: '/dashboard',       icon: LayoutDashboard },
+  { name: 'Mahsulotlar',      href: '/products',        icon: Package },
+  { name: 'Taminotchilar',    href: '/suppliers',       icon: Users },
+  { name: 'Yuridik Shaxslar', href: '/legal-entities',  icon: Building2 },
+  { name: 'Statistika',       href: '/statistics',      icon: BarChart3 },
+  { name: 'Kassa (POS)',      href: '/pos',             icon: ShoppingCart },
 ];
 
 export default function Sidebar() {

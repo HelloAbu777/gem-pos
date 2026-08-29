@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search, ShoppingCart, Trash2, Plus, Minus,
   CreditCard, Banknote, Layers, CheckCircle,
-  X, Clock, ChevronDown, ReceiptText, Package, UtensilsCrossed,
+  X, Clock, ChevronDown, ReceiptText, Package, UtensilsCrossed, Building2,
 } from 'lucide-react';
 
 /* ── Types ───────────────────────────────────────────────────── */
@@ -18,6 +18,7 @@ interface Dish {
   id: string; name: string; price: number;
   barcode?: string | null; isActive: boolean;
 }
+interface LegalEntity { id: string; name: string; phone: string; }
 interface Category { id: string; name: string }
 interface CartItem {
   cartKey: string; type: 'product' | 'dish'; refId: string;
@@ -26,8 +27,10 @@ interface CartItem {
 }
 interface SaleHistoryItem {
   id: string; totalAmount: number; paymentType: string;
+  saleType?: string;
   cashAmount: number; cardAmount: number; createdAt: string;
   cashier: { name: string };
+  legalEntity?: { name: string; phone: string } | null;
   saleItems: { quantity: number; priceAtSale: number; itemName: string }[];
 }
 type PayType = 'CASH' | 'CARD' | 'MIXED';
@@ -73,15 +76,26 @@ function ScanFeedback({ item, onHide }: {
 
 /* ── Receipt Modal ───────────────────────────────────────────── */
 function ReceiptModal({ sale, onClose }: {
-  sale: { totalAmount: number; paymentType: string; cashAmount: number; cardAmount: number; items: CartItem[] };
+  sale: {
+    totalAmount: number; paymentType: string;
+    cashAmount: number; cardAmount: number;
+    items: CartItem[];
+    legalEntity?: LegalEntity | null;
+  };
   onClose: () => void;
 }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
-        <div className="bg-green-500 px-6 py-8 text-center text-white">
+        <div className={`px-6 py-8 text-center text-white ${sale.legalEntity ? 'bg-blue-600' : 'bg-green-500'}`}>
           <CheckCircle className="w-14 h-14 mx-auto mb-3" />
           <h2 className="text-2xl font-bold">Sotuv amalga oshdi!</h2>
+          {sale.legalEntity && (
+            <p className="text-blue-100 text-sm mt-1 flex items-center justify-center gap-1">
+              <Building2 className="w-4 h-4" />
+              Y/Sh: {sale.legalEntity.name}
+            </p>
+          )}
         </div>
         <div className="p-5 space-y-4">
           <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -113,14 +127,19 @@ function ReceiptModal({ sale, onClose }: {
 }
 
 /* ── Payment Modal ───────────────────────────────────────────── */
-function PaymentModal({ total, onConfirm, onClose, processing }: {
-  total: number; onConfirm: (t: PayType, c: number, k: number) => void;
-  onClose: () => void; processing: boolean;
+function PaymentModal({ total, onConfirm, onClose, processing, legalEntities }: {
+  total: number;
+  onConfirm: (t: PayType, c: number, k: number, leId: string | null) => void;
+  onClose: () => void;
+  processing: boolean;
+  legalEntities: LegalEntity[];
 }) {
-  const [payType, setPay]  = useState<PayType>('CASH');
-  const [cashAmt, setCash] = useState('');
-  const [cardAmt, setCard] = useState('');
-  const [err, setErr]      = useState('');
+  const [payType,    setPay]    = useState<PayType>('CASH');
+  const [cashAmt,    setCash]   = useState('');
+  const [cardAmt,    setCard]   = useState('');
+  const [err,        setErr]    = useState('');
+  const [isLE,       setIsLE]   = useState(false);  // Yuridik shaxsga sotish
+  const [selectedLE, setLE]     = useState<string>('');
   const cn = Number(cashAmt) || 0;
   const kn = Number(cardAmt) || 0;
 
@@ -131,9 +150,11 @@ function PaymentModal({ total, onConfirm, onClose, processing }: {
   };
   const submit = () => {
     setErr('');
-    if (payType === 'CASH') { if (cn < total) { setErr('Naqd yetarli emas'); return; } onConfirm('CASH', total, 0); }
-    else if (payType === 'CARD') { onConfirm('CARD', 0, total); }
-    else { if (Math.abs(cn + kn - total) > 1) { setErr(`Naqd+Karta=${fmt(cn+kn)}, jami ${fmt(total)}`); return; } onConfirm('MIXED', cn, kn); }
+    if (isLE && !selectedLE) { setErr('Yuridik shaxsni tanlang'); return; }
+    const leId = isLE ? selectedLE : null;
+    if (payType === 'CASH') { if (cn < total) { setErr('Naqd yetarli emas'); return; } onConfirm('CASH', total, 0, leId); }
+    else if (payType === 'CARD') { onConfirm('CARD', 0, total, leId); }
+    else { if (Math.abs(cn + kn - total) > 1) { setErr(`Naqd+Karta=${fmt(cn+kn)}, jami ${fmt(total)}`); return; } onConfirm('MIXED', cn, kn, leId); }
   };
 
   return (
@@ -144,6 +165,54 @@ function PaymentModal({ total, onConfirm, onClose, processing }: {
           <button onClick={onClose} disabled={processing} className="p-2 hover:bg-gray-700 rounded-lg"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <div className="p-6 space-y-4">
+
+          {/* Y/Sh toggle */}
+          <div
+            onClick={() => { setIsLE(v => !v); setLE(''); setErr(''); }}
+            className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${
+              isLE ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Building2 className={`w-5 h-5 ${isLE ? 'text-blue-600' : 'text-gray-400'}`} />
+              <div>
+                <p className={`text-sm font-semibold ${isLE ? 'text-blue-700' : 'text-gray-700'}`}>
+                  Yuridik shaxsga sotish
+                </p>
+                <p className="text-xs text-gray-400">Y/Sh savdo sifatida belgilanadi</p>
+              </div>
+            </div>
+            <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${isLE ? 'bg-blue-500' : 'bg-gray-300'}`}>
+              <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${isLE ? 'translate-x-4' : ''}`} />
+            </div>
+          </div>
+
+          {/* Y/Sh select */}
+          {isLE && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Yuridik shaxsni tanlang <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedLE}
+                onChange={e => { setLE(e.target.value); setErr(''); }}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              >
+                <option value="">— Tanlang —</option>
+                {legalEntities.map(le => (
+                  <option key={le.id} value={le.id}>{le.name} · {le.phone}</option>
+                ))}
+              </select>
+              {legalEntities.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Hali yuridik shaxs yo'q.{' '}
+                  <a href="/legal-entities" target="_blank" className="text-blue-600 hover:underline">Qo'shish →</a>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* To'lov turi */}
           <div className="grid grid-cols-3 gap-2">
             {(['CASH','CARD','MIXED'] as PayType[]).map(t => (
               <button key={t} onClick={() => { setPay(t); setErr(''); setCash(''); setCard(''); }}
@@ -183,8 +252,15 @@ function PaymentModal({ total, onConfirm, onClose, processing }: {
           )}
           {err&&<div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{err}</div>}
           <button onClick={submit} disabled={processing}
-            className="w-full py-4 bg-green-600 text-white rounded-xl font-bold text-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
-            {processing?<><svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Saqlanmoqda...</>:<><CheckCircle className="w-5 h-5"/>Tasdiqlash</>}
+            className={`w-full py-4 text-white rounded-xl font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2 ${
+              isLE ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'
+            }`}>
+            {processing
+              ? <><svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Saqlanmoqda...</>
+              : isLE
+              ? <><Building2 className="w-5 h-5"/>Y/Sh sotuvni tasdiqlash</>
+              : <><CheckCircle className="w-5 h-5"/>Tasdiqlash</>
+            }
           </button>
         </div>
       </div>
@@ -198,13 +274,14 @@ export default function PosPage() {
   const [products,     setProducts]     = useState<Product[]>([]);
   const [categories,   setCategories]   = useState<Category[]>([]);
   const [dishes,       setDishes]       = useState<Dish[]>([]);
+  const [legalEntities,setLegalEntities]= useState<LegalEntity[]>([]);
   const [loadingProd,  setLoadingProd]  = useState(true);
   const [search,       setSearch]       = useState('');
   const [catFilter,    setCatFilter]    = useState('all');
   const [cart,         setCart]         = useState<CartItem[]>([]);
   const [showPay,      setShowPay]      = useState(false);
   const [processing,   setProcessing]   = useState(false);
-  const [receipt,      setReceipt]      = useState<{totalAmount:number;paymentType:string;cashAmount:number;cardAmount:number;items:CartItem[]}|null>(null);
+  const [receipt,      setReceipt]      = useState<{totalAmount:number;paymentType:string;cashAmount:number;cardAmount:number;items:CartItem[];legalEntity?:LegalEntity|null}|null>(null);
   const [history,      setHistory]      = useState<SaleHistoryItem[]>([]);
   const [histTotal,    setHistTotal]    = useState(0);
   const [loadingHist,  setLoadingHist]  = useState(false);
@@ -222,14 +299,16 @@ export default function PosPage() {
   const fetchAll = useCallback(async () => {
     setLoadingProd(true);
     try {
-      const [pr, cr, dr] = await Promise.all([
+      const [pr, cr, dr, ler] = await Promise.all([
         fetch('/api/products').then(r=>r.json()),
         fetch('/api/categories').then(r=>r.json()),
         fetch('/api/dishes').then(r=>r.json()),
+        fetch('/api/legal-entities').then(r=>r.json()),
       ]);
       setProducts(Array.isArray(pr) ? pr : []);
       setCategories(Array.isArray(cr) ? cr : []);
       setDishes(Array.isArray(dr) ? dr.filter((d:Dish)=>d.isActive) : []);
+      setLegalEntities(Array.isArray(ler) ? ler : []);
     } finally { setLoadingProd(false); }
   }, []);
 
@@ -354,7 +433,7 @@ export default function PosPage() {
   }, [products, dishes, showPay, addProduct, addDish]);
 
   /* ── Sale ── */
-  const confirmSale = async (payType: PayType, cashAmt: number, cardAmt: number) => {
+  const confirmSale = async (payType: PayType, cashAmt: number, cardAmt: number, leId: string | null) => {
     setProcessing(true);
     try {
       const items = cart.map(i => ({
@@ -364,11 +443,22 @@ export default function PosPage() {
       }));
       const res  = await fetch('/api/sales', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({paymentType:payType, cashAmount:cashAmt, cardAmount:cardAmt, items}),
+        body: JSON.stringify({
+          paymentType: payType,
+          cashAmount: cashAmt,
+          cardAmount: cardAmt,
+          legalEntityId: leId,
+          items,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error||'Xatolik'); return; }
-      setReceipt({totalAmount:cart.reduce((s,i)=>s+i.salePrice*i.qty,0), paymentType:payType, cashAmount:cashAmt, cardAmount:cardAmt, items:[...cart]});
+      const le = leId ? legalEntities.find(e=>e.id===leId) ?? null : null;
+      setReceipt({
+        totalAmount: cart.reduce((s,i)=>s+i.salePrice*i.qty,0),
+        paymentType: payType, cashAmount: cashAmt, cardAmount: cardAmt,
+        items: [...cart], legalEntity: le,
+      });
       setShowPay(false); setCart([]); fetchAll();
     } finally { setProcessing(false); }
   };
@@ -582,8 +672,14 @@ export default function PosPage() {
                     <div key={sale.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                       <button onClick={()=>setExpandedId(isExp?null:sale.id)} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 text-left">
                         <div className="flex-1">
-                          <p className="text-sm font-semibold text-gray-900">{sale.saleItems.reduce((s,i)=>s+i.quantity,0)} ta element</p>
-                          <p className="text-xs text-gray-400">{fmtTime(sale.createdAt)} · {sale.cashier?.name}</p>
+                          <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                            {sale.saleType==='LEGAL_ENTITY'&&<span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold"><Building2 className="w-3 h-3"/>Y/Sh</span>}
+                            {sale.saleItems.reduce((s,i)=>s+i.quantity,0)} ta element
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {fmtTime(sale.createdAt)} · {sale.cashier?.name}
+                            {sale.legalEntity&&<span className="text-blue-500"> · {sale.legalEntity.name}</span>}
+                          </p>
                         </div>
                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${PC[sale.paymentType]??'bg-gray-100 text-gray-600'}`}>{PAY_LABELS[sale.paymentType as PayType]??sale.paymentType}</span>
                         <div className="text-right flex-shrink-0"><p className="font-bold text-gray-900">{fmt(sale.totalAmount)}</p><p className="text-xs text-gray-400">so'm</p></div>
@@ -615,7 +711,7 @@ export default function PosPage() {
         </div>
       )}
 
-      {showPay&&<PaymentModal total={cartTotal} processing={processing} onConfirm={confirmSale} onClose={()=>setShowPay(false)}/>}
+      {showPay&&<PaymentModal total={cartTotal} processing={processing} onConfirm={confirmSale} onClose={()=>setShowPay(false)} legalEntities={legalEntities}/>}
       {receipt&&<ReceiptModal sale={receipt} onClose={()=>{setReceipt(null);fetchAll();}}/>}
     </div>
   );

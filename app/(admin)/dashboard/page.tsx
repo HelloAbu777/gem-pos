@@ -7,6 +7,8 @@ type DateRange = 'today' | 'yesterday';
 interface Stats {
   totalRevenue: number; totalCash: number; totalCard: number;
   netProfit: number; revenueChange: number; salesCount: number;
+  legalEntityRevenue: number; legalEntityCount: number;
+  retailRevenue: number; retailCount: number;
 }
 interface TopProduct { name: string; quantity: number; revenue: number }
 interface DailySale   { date: string; revenue: number }
@@ -202,6 +204,39 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-300">
                 Marja: {stats.totalRevenue > 0 ? ((stats.netProfit / stats.totalRevenue) * 100).toFixed(1) : '0'}%
               </p>
+            </div>
+          </div>
+
+          {/* Y/Sh va Savdo bo'limi */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {/* Oddiy savdo */}
+            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                </div>
+                <p className="text-sm font-semibold text-gray-700">Oddiy savdo</p>
+              </div>
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-2xl font-bold text-gray-900">{fmt(stats.retailRevenue)}</span>
+                <span className="text-sm text-gray-400">so&apos;m</span>
+              </div>
+              <p className="text-sm text-gray-500">{stats.retailCount} ta sotuv</p>
+            </div>
+
+            {/* Y/Sh savdo */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                </div>
+                <p className="text-sm font-semibold text-blue-700">Y/Sh savdo</p>
+              </div>
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-2xl font-bold text-blue-800">{fmt(stats.legalEntityRevenue)}</span>
+                <span className="text-sm text-blue-400">so&apos;m</span>
+              </div>
+              <p className="text-sm text-blue-600">{stats.legalEntityCount} ta sotuv</p>
             </div>
           </div>
 

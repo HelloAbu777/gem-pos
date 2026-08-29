@@ -77,11 +77,13 @@ export async function GET(request: NextRequest) {
     const totalCash = cashRevenue + mixedCash;
     const totalCard = cardRevenue + mixedCard;
 
-    // Sof foyda hisoblash
+    // Sof foyda hisoblash (faqat mahsulotlar, taomlar uchun purchasePrice 0)
     let totalCost = 0;
     sales.forEach((sale) => {
       sale.saleItems.forEach((item) => {
-        totalCost += item.product.purchasePrice * item.quantity;
+        if (item.product) {
+          totalCost += item.product.purchasePrice * item.quantity;
+        }
       });
     });
     const netProfit = totalRevenue - totalCost;
@@ -92,11 +94,17 @@ export async function GET(request: NextRequest) {
       ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 
       : 0;
 
-    // Eng ko'p sotilgan mahsulotlar
+    // Y/Sh (Yuridik shaxs) statistika
+    const leSales   = sales.filter(s => s.saleType === 'LEGAL_ENTITY');
+    const leRevenue = leSales.reduce((sum, s) => sum + s.totalAmount, 0);
+    const leCount   = leSales.length;
+
+    // Eng ko'p sotilgan mahsulotlar (faqat productId bo'lganlar)
     const productSales: { [key: string]: { name: string; quantity: number; revenue: number } } = {};
     
     sales.forEach((sale) => {
       sale.saleItems.forEach((item) => {
+        if (!item.productId || !item.product) return;
         if (!productSales[item.productId]) {
           productSales[item.productId] = {
             name: item.product.name,
@@ -145,6 +153,11 @@ export async function GET(request: NextRequest) {
         netProfit,
         revenueChange,
         salesCount: sales.length,
+        // Y/Sh statistika
+        legalEntityRevenue: leRevenue,
+        legalEntityCount:   leCount,
+        retailRevenue:      totalRevenue - leRevenue,
+        retailCount:        sales.length - leCount,
       },
       topProducts,
       dailySales,

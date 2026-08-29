@@ -104,19 +104,27 @@ enum VATType {
 
 // Sotuvlar
 model Sale {
-  id          String      @id @default(cuid())
-  totalAmount Float       // Jami summa
-  paymentType PaymentType
-  cashAmount  Float?      // Naqd summa (aralash to'lovda)
-  cardAmount  Float?      // Karta summasi (aralash to'lovda)
-  cashierId   String
-  cashier     User        @relation(fields: [cashierId], references: [id])
-  branchId    String
-  branch      Branch      @relation(fields: [branchId], references: [id])
-  saleItems   SaleItem[]
-  createdAt   DateTime    @default(now())
+  id              String        @id @default(cuid())
+  totalAmount     Float
+  paymentType     PaymentType
+  cashAmount      Float?
+  cardAmount      Float?
+  saleType        SaleType      @default(RETAIL)
+  cashierId       String
+  cashier         User          @relation(fields: [cashierId], references: [id])
+  branchId        String
+  branch          Branch        @relation(fields: [branchId], references: [id])
+  legalEntityId   String?
+  legalEntity     LegalEntity?  @relation(fields: [legalEntityId], references: [id])
+  saleItems       SaleItem[]
+  createdAt       DateTime      @default(now())
 
   @@map("sales")
+}
+
+enum SaleType {
+  RETAIL       // Oddiy savdo
+  LEGAL_ENTITY // Yuridik shaxsga savdo
 }
 
 enum PaymentType {
@@ -127,15 +135,28 @@ enum PaymentType {
 
 // Sotuv tafsilotlari
 model SaleItem {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   saleId      String
-  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId   String
-  product     Product @relation(fields: [productId], references: [id])
+  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  itemName    String   // mahsulot yoki taom nomi (snapshot)
   quantity    Float
-  priceAtSale Float   // Sotilgan paytdagi narx
+  priceAtSale Float
 
   @@map("sale_items")
+}
+
+// Yuridik Shaxslar
+model LegalEntity {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  sales     Sale[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("legal_entities")
 }
 
 // Taomlar (Ovqatlar)
