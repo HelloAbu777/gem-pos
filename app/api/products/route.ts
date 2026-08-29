@@ -45,89 +45,52 @@ export async function GET() {
   }
 }
 
-// POST - Yangi mahsulot yaratish (Real Database)
+// POST - Yangi mahsulot yaratish
 export async function POST(request: NextRequest) {
   try {
-    // Session tekshiruvi
     const session = await getSession();
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Avtorizatsiya talab qilinadi' },
-        { status: 401 }
-      );
-    }
+    const data    = await request.json();
 
-    // Faqat ADMIN mahsulot qo'sha oladi
-    if (session.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Ruxsat yo\'q. Faqat admin mahsulot qo\'sha oladi' },
-        { status: 403 }
-      );
-    }
-
-    const data = await request.json();
+    // branchId: sessiondan yoki default
+    const branchId = session?.branchId || 'default-branch';
 
     // Validatsiya
-    if (!data.name || !data.categoryId || !data.supplierId) {
-      return NextResponse.json(
-        { error: 'Majburiy maydonlar: name, categoryId, supplierId' },
-        { status: 400 }
-      );
+    if (!data.name?.trim())  return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
+    if (!data.categoryId)    return NextResponse.json({ error: 'Kategoriya tanlanmagan' }, { status: 400 });
+    if (!data.supplierId)    return NextResponse.json({ error: "Ta'minotchi tanlanmagan" }, { status: 400 });
+    if (!data.salePrice)     return NextResponse.json({ error: 'Sotish narxi kiritilmagan' }, { status: 400 });
+    if (!data.purchasePrice) return NextResponse.json({ error: 'Kelish narxi kiritilmagan' }, { status: 400 });
+
+    // Barcode unique tekshiruvi
+    if (data.barcode?.trim()) {
+      const existing = await prisma.product.findUnique({ where: { barcode: data.barcode.trim() } });
+      if (existing) return NextResponse.json({ error: 'Bu shtrix kod allaqachon mavjud' }, { status: 400 });
     }
 
-    if (!data.salePrice || !data.purchasePrice) {
-      return NextResponse.json(
-        { error: 'Narxlar kiritilishi shart' },
-        { status: 400 }
-      );
-    }
+    const margin = Number(data.salePrice) - Number(data.purchasePrice);
 
-    // Barcode unique tekshiruvi (agar kiritilgan bo'lsa)
-    if (data.barcode) {
-      const existingProduct = await prisma.product.findUnique({
-        where: { barcode: data.barcode },
-      });
-
-      if (existingProduct) {
-        return NextResponse.json(
-          { error: 'Ushbu shtrix kod allaqachon mavjud' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Marja hisoblash
-    const margin = data.salePrice - data.purchasePrice;
-
-    // Yangi mahsulot yaratish
     const newProduct = await prisma.product.create({
       data: {
-        name: data.name,
-        barcode: data.barcode || null,
-        unit: data.unit || 'dona',
-        quantity: data.quantity || 0,
-        minQuantity: data.minQuantity || 10,
-        purchasePrice: data.purchasePrice,
-        salePrice: data.salePrice,
+        name:          data.name.trim(),
+        barcode:       data.barcode?.trim() || null,
+        unit:          data.unit          || 'dona',
+        quantity:      Number(data.quantity)      || 0,
+        minQuantity:   Number(data.minQuantity)   || 10,
+        purchasePrice: Number(data.purchasePrice),
+        salePrice:     Number(data.salePrice),
         margin,
-        vatType: data.vatType || 'NO_VAT',
-        expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
-        categoryId: data.categoryId,
-        supplierId: data.supplierId,
-        branchId: session.branchId, // O'z filialiga bog'lash
+        vatType:       data.vatType       || 'NO_VAT',
+        expiryDate:    data.expiryDate ? new Date(data.expiryDate) : null,
+        categoryId:    data.categoryId,
+        supplierId:    data.supplierId,
+        branchId,
       },
-      include: {
-        category: true,
-        supplier: true,
-      },
+      include: { category: true, supplier: true },
     });
 
     return NextResponse.json(newProduct, { status: 201 });
   } catch (error) {
     console.error('Mahsulot yaratishda xatolik:', error);
-    return NextResponse.json(
-      { error: 'Server xatosi' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
   }
 }

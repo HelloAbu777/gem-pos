@@ -5,6 +5,7 @@ import {
   Plus, Search, X, Package, Tag, Truck, Calendar,
   AlertTriangle, Barcode, Pencil, Trash2, Printer,
 } from 'lucide-react';
+import BarcodePrintModal from '@/components/ui/BarcodePrintModal';
 
 /* ── Types ── */
 interface Category { id: string; name: string }
@@ -34,47 +35,10 @@ const fmt     = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const VAT_LABELS: Record<string, string> = { NO_VAT: 'Soliqsiz', STANDARD: 'Standart', ZERO_VAT: '0%' };
 
-/* ── Barcode Print ── */
-function printBarcode(name: string, barcode: string, price: number) {
-  const w = window.open('', '_blank', 'width=400,height=300');
-  if (!w) return;
-  w.document.write(`
-    <!DOCTYPE html><html><head><title>Barcode</title>
-    <style>
-      * { margin:0; padding:0; box-sizing:border-box; }
-      body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#fff; font-family:monospace; }
-      .label { border:1px solid #ccc; padding:10px 14px; width:200px; text-align:center; }
-      .name  { font-size:11px; font-weight:bold; margin-bottom:6px; word-break:break-word; }
-      .code  { font-size:18px; letter-spacing:2px; font-family:monospace; margin:4px 0; }
-      .price { font-size:13px; font-weight:bold; margin-top:6px; }
-      .bars  { display:flex; justify-content:center; align-items:flex-end; gap:1px; margin:6px 0; height:40px; }
-      .bar   { background:#000; }
-    </style></head><body>
-    <div class="label">
-      <div class="name">${name}</div>
-      <div class="bars" id="bars"></div>
-      <div class="code">${barcode}</div>
-      <div class="price">${fmt(price)} so'm</div>
-    </div>
-    <script>
-      const bars = document.getElementById('bars');
-      const code = '${barcode}';
-      const widths = [3,2,1,2,3,1,2,1,3,2,1,2,1,3,2];
-      for(let i=0;i<code.length*3+15;i++){
-        const b=document.createElement('div');
-        b.className='bar';
-        const w=widths[i%widths.length];
-        b.style.width=(i%2===0?w:w-1)+'px';
-        b.style.height=(30+((i*7)%12))+'px';
-        bars.appendChild(b);
-      }
-      window.onload = () => { window.print(); window.close(); };
-    </script></body></html>`);
-  w.document.close();
-}
-
 /* ── Product Detail Modal ── */
-function DetailModal({ product, onClose }: { product: Product; onClose: () => void }) {
+function DetailModal({ product, onClose, onPrint }: {
+  product: Product; onClose: () => void; onPrint?: () => void;
+}) {
   const marginPct  = product.purchasePrice > 0
     ? ((product.salePrice - product.purchasePrice) / product.purchasePrice * 100).toFixed(1) : '0';
   const isLow      = product.quantity <= product.minQuantity;
@@ -95,88 +59,58 @@ function DetailModal({ product, onClose }: { product: Product; onClose: () => vo
               <p className="text-gray-400 text-sm">{product.category.name}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-6 space-y-4 overflow-y-auto max-h-[65vh]">
-          {/* Status badges */}
           <div className="flex flex-wrap gap-2">
             <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
               isOut ? 'text-red-600 bg-red-50 border-red-200' :
               isLow ? 'text-orange-600 bg-orange-50 border-orange-200' :
               'text-green-600 bg-green-50 border-green-200'
-            }`}>
-              {isOut ? 'Tugagan' : isLow ? '⚠ Kam qolgan' : '✓ Yetarli'}
-            </span>
+            }`}>{isOut ? 'Tugagan' : isLow ? '⚠ Kam qolgan' : '✓ Yetarli'}</span>
             {expiryDays !== null && (
               <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${
                 expiryDays <= 0 ? 'text-red-600 bg-red-50 border-red-200' :
                 expiryDays <= 7 ? 'text-orange-600 bg-orange-50 border-orange-200' :
                 'text-gray-600 bg-gray-50 border-gray-200'
-              }`}>
-                <Calendar className="w-3 h-3 inline mr-1" />
-                {expiryDays <= 0 ? 'Muddati o\'tgan' : `${expiryDays} kun qoldi`}
-              </span>
+              }`}><Calendar className="w-3 h-3 inline mr-1" />{expiryDays <= 0 ? "Muddati o'tgan" : `${expiryDays} kun qoldi`}</span>
             )}
           </div>
-          {/* Narxlar */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <p className="text-xs text-gray-500 mb-1">Kelish narxi</p>
-              <p className="text-xl font-bold text-gray-900">{fmt(product.purchasePrice)}</p>
-              <p className="text-xs text-gray-400">so'm</p>
-            </div>
-            <div className="bg-green-50 border border-green-100 rounded-xl p-4">
-              <p className="text-xs text-gray-500 mb-1">Sotish narxi</p>
-              <p className="text-xl font-bold text-green-700">{fmt(product.salePrice)}</p>
-              <p className="text-xs text-gray-400">so'm</p>
-            </div>
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-              <p className="text-xs text-gray-500 mb-1">Marja</p>
-              <p className="text-xl font-bold text-blue-700">+{fmt(product.salePrice - product.purchasePrice)}</p>
-              <p className="text-xs text-blue-400">{marginPct}%</p>
-            </div>
+            <div className="bg-gray-50 rounded-xl p-4"><p className="text-xs text-gray-500 mb-1">Kelish narxi</p><p className="text-xl font-bold text-gray-900">{fmt(product.purchasePrice)}</p><p className="text-xs text-gray-400">so&apos;m</p></div>
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4"><p className="text-xs text-gray-500 mb-1">Sotish narxi</p><p className="text-xl font-bold text-green-700">{fmt(product.salePrice)}</p><p className="text-xs text-gray-400">so&apos;m</p></div>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4"><p className="text-xs text-gray-500 mb-1">Marja</p><p className="text-xl font-bold text-blue-700">+{fmt(product.salePrice - product.purchasePrice)}</p><p className="text-xs text-blue-400">{marginPct}%</p></div>
             <div className={`rounded-xl p-4 border ${isOut ? 'bg-red-50 border-red-100' : isLow ? 'bg-orange-50 border-orange-100' : 'bg-white border-gray-200'}`}>
               <p className="text-xs text-gray-500 mb-1">Zaxira</p>
               <p className={`text-xl font-bold ${isOut ? 'text-red-600' : isLow ? 'text-orange-600' : 'text-gray-900'}`}>{fmt(product.quantity)}</p>
               <p className="text-xs text-gray-400">{product.unit} (min: {fmt(product.minQuantity)})</p>
             </div>
           </div>
-          {/* Qo'shimcha */}
           <div className="border border-gray-200 rounded-xl divide-y divide-gray-100 text-sm">
             {[
-              { icon: Barcode, label: 'Shtrix kod', val: product.barcode ? <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">{product.barcode}</span> : '—' },
-              { icon: Tag,     label: 'Kategoriya', val: product.category.name },
-              { icon: Truck,   label: "Ta'minotchi", val: product.supplier.name },
-              { icon: Package, label: "O'lchov", val: product.unit },
-              { icon: Package, label: 'Soliq', val: VAT_LABELS[product.vatType] ?? product.vatType },
+              { icon: Barcode,  label: 'Shtrix kod',    val: product.barcode ? <span className="font-mono bg-gray-100 px-2 py-0.5 rounded">{product.barcode}</span> : '—' },
+              { icon: Tag,      label: 'Kategoriya',    val: product.category.name },
+              { icon: Truck,    label: "Ta'minotchi",   val: product.supplier.name },
+              { icon: Package,  label: "O'lchov",       val: product.unit },
+              { icon: Package,  label: 'Soliq',         val: VAT_LABELS[product.vatType] ?? product.vatType },
               ...(product.expiryDate ? [{ icon: Calendar, label: 'Muddat', val: fmtDate(product.expiryDate) }] : []),
-              { icon: Calendar, label: "Qo'shilgan", val: fmtDate(product.createdAt) },
+              { icon: Calendar, label: "Qo'shilgan",   val: fmtDate(product.createdAt) },
             ].map(({ icon: Icon, label, val }, i) => (
               <div key={i} className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-2 text-gray-500">
-                  <Icon className="w-4 h-4" />{label}
-                </div>
+                <div className="flex items-center gap-2 text-gray-500"><Icon className="w-4 h-4" />{label}</div>
                 <span className="text-gray-800 font-medium">{val}</span>
               </div>
             ))}
           </div>
-          {/* Print button */}
           {product.barcode && (
-            <button
-              onClick={() => printBarcode(product.name, product.barcode!, product.salePrice)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50"
-            >
-              <Printer className="w-4 h-4" />
-              Shtrix kodni chop etish
+            <button onClick={() => { onClose(); onPrint?.(); }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">
+              <Printer className="w-4 h-4" />Shtrix kodni chop etish
             </button>
           )}
         </div>
         <div className="px-6 pb-5">
-          <button onClick={onClose} className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 text-sm">
-            Yopish
-          </button>
+          <button onClick={onClose} className="w-full py-2.5 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 text-sm">Yopish</button>
         </div>
       </div>
     </div>
@@ -184,9 +118,7 @@ function DetailModal({ product, onClose }: { product: Product; onClose: () => vo
 }
 
 /* ── Add / Edit Modal ── */
-function ProductModal({
-  open, onClose, onSave, initial, categories, suppliers,
-}: {
+function ProductModal({ open, onClose, onSave, initial, categories, suppliers }: {
   open: boolean; onClose: () => void;
   onSave: (data: FormData) => Promise<void>;
   initial?: Product | null;
@@ -199,23 +131,19 @@ function ProductModal({
   useEffect(() => {
     if (open) {
       setError('');
-      if (initial) {
-        setForm({
-          name:          initial.name,
-          barcode:       initial.barcode ?? '',
-          unit:          initial.unit,
-          quantity:      String(initial.quantity),
-          minQuantity:   String(initial.minQuantity),
-          purchasePrice: String(initial.purchasePrice),
-          salePrice:     String(initial.salePrice),
-          vatType:       initial.vatType,
-          expiryDate:    initial.expiryDate ? initial.expiryDate.split('T')[0] : '',
-          categoryId:    initial.category.id,
-          supplierId:    initial.supplier.id,
-        });
-      } else {
-        setForm(EMPTY_FORM);
-      }
+      setForm(initial ? {
+        name:          initial.name,
+        barcode:       initial.barcode ?? '',
+        unit:          initial.unit,
+        quantity:      String(initial.quantity),
+        minQuantity:   String(initial.minQuantity),
+        purchasePrice: String(initial.purchasePrice),
+        salePrice:     String(initial.salePrice),
+        vatType:       initial.vatType,
+        expiryDate:    initial.expiryDate ? initial.expiryDate.split('T')[0] : '',
+        categoryId:    initial.category.id,
+        supplierId:    initial.supplier.id,
+      } : EMPTY_FORM);
     }
   }, [open, initial]);
 
@@ -223,11 +151,11 @@ function ProductModal({
 
   const handleSave = async () => {
     setError('');
-    if (!form.name.trim())      { setError('Nom kiritilmagan'); return; }
-    if (!form.purchasePrice)    { setError('Kelish narxi kiritilmagan'); return; }
-    if (!form.salePrice)        { setError('Sotish narxi kiritilmagan'); return; }
-    if (!form.categoryId)       { setError('Kategoriya tanlanmagan'); return; }
-    if (!form.supplierId)       { setError("Ta'minotchi tanlanmagan"); return; }
+    if (!form.name.trim())   { setError('Nom kiritilmagan'); return; }
+    if (!form.purchasePrice) { setError('Kelish narxi kiritilmagan'); return; }
+    if (!form.salePrice)     { setError('Sotish narxi kiritilmagan'); return; }
+    if (!form.categoryId)    { setError('Kategoriya tanlanmagan'); return; }
+    if (!form.supplierId)    { setError("Ta'minotchi tanlanmagan"); return; }
     setSaving(true);
     try { await onSave(form); onClose(); }
     catch (e: unknown) { setError(e instanceof Error ? e.message : 'Xatolik'); }
@@ -236,21 +164,19 @@ function ProductModal({
 
   if (!open) return null;
 
+  const inp = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none";
   const F = ({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) => (
     <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1">
-        {label}{req && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}{req && <span className="text-red-500 ml-0.5">*</span>}</label>
       {children}
     </div>
   );
-  const inp = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="font-bold text-gray-900">{initial ? 'Mahsulotni tahrirlash' : 'Yangi mahsulot'}</h2>
+          <h2 className="font-bold text-gray-900">{initial ? 'Mahsulotni tahrirlash' : 'Yangi mahsulot qo\'shish'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-6 grid grid-cols-2 gap-4 overflow-y-auto max-h-[70vh]">
@@ -260,8 +186,16 @@ function ProductModal({
           <F label="Sotish narxi (so'm)" req><input type="number" className={inp} value={form.salePrice} onChange={e => set('salePrice', e.target.value)} placeholder="0" /></F>
           <F label="Miqdor"><input type="number" className={inp} value={form.quantity} onChange={e => set('quantity', e.target.value)} /></F>
           <F label="Minimal zaxira"><input type="number" className={inp} value={form.minQuantity} onChange={e => set('minQuantity', e.target.value)} /></F>
-          <F label="O'lchov birligi"><select className={inp} value={form.unit} onChange={e => set('unit', e.target.value)}><option>dona</option><option>kg</option><option>litr</option><option>metr</option></select></F>
-          <F label="Soliq"><select className={inp} value={form.vatType} onChange={e => set('vatType', e.target.value)}><option value="NO_VAT">Soliqsiz</option><option value="STANDARD">Standart</option><option value="ZERO_VAT">0%</option></select></F>
+          <F label="O'lchov birligi">
+            <select className={inp} value={form.unit} onChange={e => set('unit', e.target.value)}>
+              <option>dona</option><option>kg</option><option>litr</option><option>metr</option>
+            </select>
+          </F>
+          <F label="Soliq">
+            <select className={inp} value={form.vatType} onChange={e => set('vatType', e.target.value)}>
+              <option value="NO_VAT">Soliqsiz</option><option value="STANDARD">Standart</option><option value="ZERO_VAT">0%</option>
+            </select>
+          </F>
           <F label="Kategoriya" req>
             <select className={inp} value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
               <option value="">— Tanlang —</option>
@@ -274,12 +208,14 @@ function ProductModal({
               {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </F>
-          <F label="Yaroqlilik muddati"><input type="date" className={inp} value={form.expiryDate} onChange={e => set('expiryDate', e.target.value)} /></F>
+          <F label="Yaroqlilik muddati">
+            <input type="date" className={inp} value={form.expiryDate} onChange={e => set('expiryDate', e.target.value)} />
+          </F>
           <div className="col-span-2">
-            {form.purchasePrice && form.salePrice && Number(form.salePrice) > 0 && (
+            {form.purchasePrice && form.salePrice && (
               <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2.5 text-sm">
                 <span className="text-gray-500">Marja: </span>
-                <span className="font-bold text-blue-700">+{fmt(Number(form.salePrice) - Number(form.purchasePrice))} so'm</span>
+                <span className="font-bold text-blue-700">+{fmt(Number(form.salePrice) - Number(form.purchasePrice))} so&apos;m</span>
                 {Number(form.purchasePrice) > 0 && (
                   <span className="text-blue-500 ml-2">
                     ({((Number(form.salePrice) - Number(form.purchasePrice)) / Number(form.purchasePrice) * 100).toFixed(1)}%)
@@ -303,17 +239,18 @@ function ProductModal({
 
 /* ── Main Page ── */
 export default function ProductsPage() {
-  const [products,     setProducts]     = useState<Product[]>([]);
-  const [categories,   setCategories]   = useState<Category[]>([]);
-  const [suppliers,    setSuppliers]    = useState<Supplier[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [search,       setSearch]       = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [selected,     setSelected]     = useState<Product | null>(null);  // detail
-  const [editTarget,   setEditTarget]   = useState<Product | null>(null);  // edit
-  const [addOpen,      setAddOpen]      = useState(false);
-  const [deleteId,     setDeleteId]     = useState<string | null>(null);
-  const [deleteError,  setDeleteError]  = useState('');
+  const [products,    setProducts]    = useState<Product[]>([]);
+  const [categories,  setCategories]  = useState<Category[]>([]);
+  const [suppliers,   setSuppliers]   = useState<Supplier[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [search,      setSearch]      = useState('');
+  const [statusFilter,setStatusFilter]= useState('all');
+  const [selected,    setSelected]    = useState<Product | null>(null);
+  const [editTarget,  setEditTarget]  = useState<Product | null>(null);
+  const [addOpen,     setAddOpen]     = useState(false);
+  const [deleteId,    setDeleteId]    = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [printTarget, setPrintTarget] = useState<Product | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -350,14 +287,9 @@ export default function ProductsPage() {
   };
 
   const filtered = products.filter(p => {
-    const matchSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.barcode ?? '').toLowerCase().includes(search.toLowerCase());
-    const matchStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'low' && p.quantity <= p.minQuantity && p.quantity > 0) ||
-      (statusFilter === 'out' && p.quantity === 0);
-    return matchSearch && matchStatus;
+    const ms = p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode ?? '').toLowerCase().includes(search.toLowerCase());
+    const mf = statusFilter === 'all' || (statusFilter === 'low' && p.quantity <= p.minQuantity && p.quantity > 0) || (statusFilter === 'out' && p.quantity === 0);
+    return ms && mf;
   });
 
   return (
@@ -426,7 +358,6 @@ export default function ProductsPage() {
                   const mPct   = p.purchasePrice > 0 ? ((margin / p.purchasePrice) * 100).toFixed(0) : '0';
                   const expiryDays = p.expiryDate
                     ? Math.ceil((new Date(p.expiryDate).getTime() - Date.now()) / 86400000) : null;
-
                   return (
                     <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       {/* Nom */}
@@ -434,7 +365,7 @@ export default function ProductsPage() {
                         <p className="font-semibold text-gray-900 text-sm hover:text-blue-600 transition-colors">{p.name}</p>
                         {p.expiryDate && expiryDays !== null && (
                           <p className={`text-xs mt-0.5 ${expiryDays <= 0 ? 'text-red-500' : expiryDays <= 7 ? 'text-orange-500' : 'text-gray-400'}`}>
-                            {expiryDays <= 0 ? '⚠ Muddati o\'tgan' : expiryDays <= 7 ? `⏰ ${expiryDays} kun qoldi` : `📅 ${fmtDate(p.expiryDate)}`}
+                            {expiryDays <= 0 ? "⚠ Muddati o'tgan" : expiryDays <= 7 ? `⏰ ${expiryDays} kun qoldi` : `📅 ${fmtDate(p.expiryDate)}`}
                           </p>
                         )}
                       </td>
@@ -443,9 +374,8 @@ export default function ProductsPage() {
                         {p.barcode ? (
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-1 rounded-md">{p.barcode}</span>
-                            <button onClick={() => printBarcode(p.name, p.barcode!, p.salePrice)}
-                              className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                              title="Chop etish">
+                            <button onClick={() => setPrintTarget(p)}
+                              className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" title="Chop etish">
                               <Printer className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -460,12 +390,12 @@ export default function ProductsPage() {
                       {/* Kelish */}
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-gray-500">{fmt(p.purchasePrice)}</span>
-                        <span className="text-xs text-gray-400 ml-0.5">so'm</span>
+                        <span className="text-xs text-gray-400 ml-0.5">so&apos;m</span>
                       </td>
                       {/* Sotish */}
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-bold text-gray-900">{fmt(p.salePrice)}</span>
-                        <span className="text-xs text-gray-400 ml-0.5">so'm</span>
+                        <span className="text-xs text-gray-400 ml-0.5">so&apos;m</span>
                       </td>
                       {/* Marja */}
                       <td className="px-4 py-3 text-right hidden lg:table-cell">
@@ -483,17 +413,14 @@ export default function ProductsPage() {
                       {/* Amallar */}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          {/* Detail */}
                           <button onClick={() => setSelected(p)}
                             className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Ko'rish">
                             <Barcode className="w-4 h-4" />
                           </button>
-                          {/* Edit */}
                           <button onClick={() => setEditTarget(p)}
                             className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Tahrirlash">
                             <Pencil className="w-4 h-4" />
                           </button>
-                          {/* Delete */}
                           <button onClick={() => { setDeleteId(p.id); setDeleteError(''); }}
                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="O'chirish">
                             <Trash2 className="w-4 h-4" />
@@ -510,34 +437,51 @@ export default function ProductsPage() {
       </div>
 
       {/* Detail Modal */}
-      {selected && <DetailModal product={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <DetailModal
+          product={selected}
+          onClose={() => setSelected(null)}
+          onPrint={() => { setPrintTarget(selected); setSelected(null); }}
+        />
+      )}
 
       {/* Add Modal */}
       <ProductModal
         open={addOpen} onClose={() => setAddOpen(false)}
         onSave={form => handleSave(form)}
-        categories={categories} suppliers={suppliers} />
+        categories={categories} suppliers={suppliers}
+      />
 
       {/* Edit Modal */}
       <ProductModal
         open={!!editTarget} onClose={() => setEditTarget(null)}
         onSave={form => handleSave(form, editTarget!.id)}
-        initial={editTarget} categories={categories} suppliers={suppliers} />
+        initial={editTarget} categories={categories} suppliers={suppliers}
+      />
 
-      {/* Delete confirm */}
+      {/* Delete Confirm */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">O'chirishni tasdiqlang</h3>
-            <p className="text-sm text-gray-500 mb-4">Bu mahsulot o'chiriladi.</p>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">O&apos;chirishni tasdiqlang</h3>
+            <p className="text-sm text-gray-500 mb-4">Bu mahsulot o&apos;chiriladi.</p>
             {deleteError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-4">{deleteError}</p>}
             <div className="flex gap-3">
               <button onClick={() => setDeleteId(null)} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50">Bekor</button>
-              <button onClick={() => handleDelete(deleteId)} className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700">O'chirish</button>
+              <button onClick={() => handleDelete(deleteId)} className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700">O&apos;chirish</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Barcode Print Modal */}
+      <BarcodePrintModal
+        open={!!printTarget}
+        onClose={() => setPrintTarget(null)}
+        name={printTarget?.name ?? ''}
+        barcode={printTarget?.barcode ?? ''}
+        price={printTarget?.salePrice ?? 0}
+      />
     </div>
   );
 }

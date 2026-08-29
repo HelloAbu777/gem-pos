@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, X, UtensilsCrossed, Search, ToggleLeft, ToggleRight, Printer } from 'lucide-react';
+import BarcodePrintModal from '@/components/ui/BarcodePrintModal';
 
 interface Dish {
   id: string;
@@ -13,44 +14,6 @@ interface Dish {
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
-
-/* ── Barcode Print ── */
-function printBarcode(name: string, barcode: string, price: number) {
-  const w = window.open('', '_blank', 'width=400,height=300');
-  if (!w) return;
-  w.document.write(`
-    <!DOCTYPE html><html><head><title>Barcode</title>
-    <style>
-      * { margin:0; padding:0; box-sizing:border-box; }
-      body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#fff; font-family:monospace; }
-      .label { border:1px solid #ccc; padding:10px 14px; width:200px; text-align:center; }
-      .name  { font-size:11px; font-weight:bold; margin-bottom:6px; word-break:break-word; }
-      .code  { font-size:18px; letter-spacing:2px; font-family:monospace; margin:4px 0; }
-      .price { font-size:13px; font-weight:bold; margin-top:6px; }
-      .bars  { display:flex; justify-content:center; align-items:flex-end; gap:1px; margin:6px 0; height:40px; }
-      .bar   { background:#000; }
-    </style></head><body>
-    <div class="label">
-      <div class="name">${name}</div>
-      <div class="bars" id="bars"></div>
-      <div class="code">${barcode}</div>
-      <div class="price">${fmt(price)} so'm</div>
-    </div>
-    <script>
-      const bars = document.getElementById('bars');
-      const widths = [3,2,1,2,3,1,2,1,3,2,1,2,1,3,2];
-      for(let i=0;i<'${barcode}'.length*3+15;i++){
-        const b=document.createElement('div');
-        b.className='bar';
-        const w=widths[i%widths.length];
-        b.style.width=(i%2===0?w:w-1)+'px';
-        b.style.height=(30+((i*7)%12))+'px';
-        bars.appendChild(b);
-      }
-      window.onload = () => { window.print(); window.close(); };
-    </script></body></html>`);
-  w.document.close();
-}
 
 /* ── Modal ── */
 function DishModal({
@@ -205,6 +168,7 @@ export default function DishesPage() {
   const [modalOpen,  setModalOpen]  = useState(false);
   const [editTarget, setEditTarget] = useState<Dish | null>(null);
   const [deleteId,   setDeleteId]   = useState<string | null>(null);
+  const [printTarget,setPrintTarget]= useState<Dish | null>(null);
 
   const fetchDishes = useCallback(async () => {
     try {
@@ -339,7 +303,7 @@ export default function DishesPage() {
                           {dish.barcode}
                         </span>
                         <button
-                          onClick={() => printBarcode(dish.name, dish.barcode!, dish.price)}
+                          onClick={() => setPrintTarget(dish)}
                           className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                           title="Chop etish"
                         >
@@ -400,31 +364,39 @@ export default function DishesPage() {
         initial={editTarget}
       />
 
+      {/* Barcode Print Modal */}
+      <BarcodePrintModal
+        open={!!printTarget}
+        onClose={() => setPrintTarget(null)}
+        name={printTarget?.name ?? ''}
+        barcode={printTarget?.barcode ?? ''}
+        price={printTarget?.price ?? 0}
+      />
+    </div>
+  );
+}
       {/* Delete confirm */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">O'chirishni tasdiqlang</h3>
-            <p className="text-sm text-gray-500 mb-6">
-              Bu taom o'chiriladi va kassada ko'rinmaydi.
-            </p>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">O&apos;chirishni tasdiqlang</h3>
+            <p className="text-sm text-gray-500 mb-6">Bu taom o&apos;chiriladi va kassada ko&apos;rinmaydi.</p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteId(null)}
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
-              >
-                Bekor qilish
-              </button>
-              <button
-                onClick={() => handleDelete(deleteId)}
-                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700"
-              >
-                O'chirish
-              </button>
+              <button onClick={() => setDeleteId(null)} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">Bekor qilish</button>
+              <button onClick={() => handleDelete(deleteId)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">O&apos;chirish</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Barcode Print Modal */}
+      <BarcodePrintModal
+        open={!!printTarget}
+        onClose={() => setPrintTarget(null)}
+        name={printTarget?.name ?? ''}
+        barcode={printTarget?.barcode ?? ''}
+        price={printTarget?.price ?? 0}
+      />
     </div>
   );
 }
