@@ -29,11 +29,17 @@ export async function GET(request: NextRequest) {
     const whereBase  = { createdAt: { gte: start, lte: end },  ...(branchId ? { branchId } : {}) };
     const wherePrev  = { createdAt: { gte: prevStart, lte: prevEnd }, ...(branchId ? { branchId } : {}) };
 
-    // Fetch sales — include saleItems but NOT product (may cause issues)
+    // Fetch sales — select only safe fields (saleType may not exist in prod DB)
     const [sales, previousSales] = await Promise.all([
       prisma.sale.findMany({
         where: whereBase,
-        include: {
+        select: {
+          id:          true,
+          totalAmount: true,
+          paymentType: true,
+          cashAmount:  true,
+          cardAmount:  true,
+          createdAt:   true,
           saleItems: {
             select: {
               productId:   true,
