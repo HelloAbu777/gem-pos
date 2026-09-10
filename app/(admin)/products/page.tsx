@@ -23,6 +23,7 @@ type SaveForm = {
   minQuantity: string; purchasePrice: string; salePrice: string;
   vatType: string; expiryDate: string; categoryId: string; supplierId: string;
 };
+const fmt     = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const VAT_LABELS: Record<string, string> = { NO_VAT: 'Soliqsiz', STANDARD: 'Standart', ZERO_VAT: '0%' };
 
