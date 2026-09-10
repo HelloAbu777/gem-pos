@@ -26,6 +26,19 @@ type SaveForm = {
 const fmt     = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const VAT_LABELS: Record<string, string> = { NO_VAT: 'Soliqsiz', STANDARD: 'Standart', ZERO_VAT: '0%' };
+const inp = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none";
+
+/* ── Reusable field wrapper (must be outside modal to avoid remount on each render) ── */
+function F({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">
+        {label}{req && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 /* ── Product Detail Modal ── */
 function DetailModal({ product, onClose, onPrint }: {
@@ -178,16 +191,6 @@ const ProductModal = memo(function ProductModal({ open, onClose, onSave, initial
   };
 
   if (!open) return null;
-
-  const inp = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none";
-  const F = ({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) => (
-    <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1">
-        {label}{req && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
-      {children}
-    </div>
-  );
 
   const margin = Number(salePrice) - Number(purchasePrice);
 
