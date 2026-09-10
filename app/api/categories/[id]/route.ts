@@ -1,12 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// DEMO MODE - In-memory categories storage
-let categories = [
-  { id: '1', name: 'Ichimliklar', _count: { products: 15 } },
-  { id: '2', name: 'Oziq-ovqat', _count: { products: 32 } },
-  { id: '3', name: 'Maishiy texnika', _count: { products: 8 } },
-  { id: '4', name: 'Kosmetika', _count: { products: 21 } },
-];
+import { prisma } from '@/lib/prisma';
 
 // PUT - Kategoriyani yangilash
 export async function PUT(
@@ -14,34 +7,48 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { name } = await request.json();
     const { id } = await params;
+    const { name } = await request.json();
 
-    const index = categories.findIndex(cat => cat.id === id);
-    if (index === -1) {
-      return NextResponse.json({ error: 'Kategoriya topilmadi' }, { status: 404 });
+    if (!name?.trim()) {
+      return NextResponse.json({ error: 'Kategoriya nomi kiritilmagan' }, { status: 400 });
     }
 
-    categories[index] = { ...categories[index], name };
-    return NextResponse.json(categories[index]);
+    const category = await prisma.category.update({
+      where: { id },
+      data:  { name: name.trim() },
+      include: { _count: { select: { products: true } } },
+    });
+
+    return NextResponse.json(category);
   } catch (error) {
-    console.error('Error updating category:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    console.error('Category PUT error:', error);
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
 // DELETE - Kategoriyani o'chirish
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
 
-    categories = categories.filter(cat => cat.id !== id);
+    const count = await prisma.product.count({ where: { categoryId: id } });
+    if (count > 0) {
+      return NextResponse.json(
+        { error: `Bu kategoriyada ${count} ta mahsulot bor. Avval mahsulotlarni o'chiring.` },
+        { status: 400 }
+      );
+    }
+
+    await prisma.category.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting category:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    console.error('Category DELETE error:', error);
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
