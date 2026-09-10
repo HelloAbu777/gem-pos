@@ -37,7 +37,12 @@ type PayType = 'CASH' | 'CARD' | 'MIXED';
 type MainTab  = 'pos' | 'history';
 
 /* ── Helpers ─────────────────────────────────────────────────── */
-const fmt = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+// 1.000.000 ko'rinishida formatlash (nuqta separator)
+const fmt = (n: number) => new Intl.NumberFormat('de-DE').format(Math.round(n));
+// Foydalanuvchi kiritgan matndan faqat raqamlarni olish
+const rawNum = (s: string) => s.replace(/\D/g, '');
+// Raqam stringni 1.000.000 formatda ko'rsatish
+const fmtInput = (raw: string) => raw ? new Intl.NumberFormat('de-DE').format(Number(raw)) : '';
 const fmtTime = (d: string) => new Date(d).toLocaleString('uz-UZ', {
   day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
 });
@@ -135,17 +140,23 @@ function PaymentModal({ total, onConfirm, onClose, processing, legalEntities }: 
   legalEntities: LegalEntity[];
 }) {
   const [payType,    setPay]    = useState<PayType>('CASH');
-  const [cashAmt,    setCash]   = useState('');
-  const [cardAmt,    setCard]   = useState('');
+  const [cashRaw,    setCashRaw]   = useState('');
+  const [cardRaw,    setCardRaw]   = useState('');
   const [err,        setErr]    = useState('');
-  const [isLE,       setIsLE]   = useState(false);  // Yuridik shaxsga sotish
+  const [isLE,       setIsLE]   = useState(false);
   const [selectedLE, setLE]     = useState<string>('');
-  const cn = Number(cashAmt) || 0;
-  const kn = Number(cardAmt) || 0;
+  const cn = Number(cashRaw) || 0;
+  const kn = Number(cardRaw) || 0;
 
   const handleCash = (v: string) => {
-    setCash(v);
-    if (payType === 'MIXED') setCard(String(Math.max(0, total - (Number(v) || 0))));
+    const raw = rawNum(v);
+    setCashRaw(raw);
+    if (payType === 'MIXED') setCardRaw(String(Math.max(0, total - (Number(raw) || 0))));
+    setErr('');
+  };
+  const handleCard = (v: string) => {
+    const raw = rawNum(v);
+    setCardRaw(raw);
     setErr('');
   };
   const submit = () => {
@@ -215,7 +226,7 @@ function PaymentModal({ total, onConfirm, onClose, processing, legalEntities }: 
           {/* To'lov turi */}
           <div className="grid grid-cols-3 gap-2">
             {(['CASH','CARD','MIXED'] as PayType[]).map(t => (
-              <button key={t} onClick={() => { setPay(t); setErr(''); setCash(''); setCard(''); }}
+              <button key={t} onClick={() => { setPay(t); setErr(''); setCashRaw(''); setCardRaw(''); }}
                 className={`py-3 rounded-xl font-semibold text-sm flex flex-col items-center gap-1.5 ${payType===t?'bg-gray-900 text-white':'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                 {t==='CASH'&&<Banknote className="w-5 h-5"/>}{t==='CARD'&&<CreditCard className="w-5 h-5"/>}{t==='MIXED'&&<Layers className="w-5 h-5"/>}
                 {PAY_LABELS[t]}
@@ -224,8 +235,15 @@ function PaymentModal({ total, onConfirm, onClose, processing, legalEntities }: 
           </div>
           {payType==='CASH'&&(
             <div className="space-y-3">
-              <input type="number" value={cashAmt} onChange={e=>handleCash(e.target.value)} placeholder={String(total)} autoFocus
-                className="w-full px-4 py-3 text-xl border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold"/>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={fmtInput(cashRaw)}
+                onChange={e => handleCash(e.target.value)}
+                placeholder={fmt(total)}
+                autoFocus
+                className="w-full px-4 py-3 text-xl border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold tracking-wide"
+              />
               {cn>=total&&<div className="flex justify-between px-4 py-3 bg-green-50 text-green-700 rounded-xl font-semibold"><span>Qaytim</span><span>{fmt(cn-total)} so'm</span></div>}
             </div>
           )}
@@ -238,12 +256,25 @@ function PaymentModal({ total, onConfirm, onClose, processing, legalEntities }: 
           {payType==='MIXED'&&(
             <div className="space-y-3">
               <div><label className="text-sm font-medium text-gray-600 mb-1 block">Naqd</label>
-                <input type="number" value={cashAmt} onChange={e=>handleCash(e.target.value)} placeholder="0" autoFocus
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold text-lg"/>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={fmtInput(cashRaw)}
+                  onChange={e => handleCash(e.target.value)}
+                  placeholder="0"
+                  autoFocus
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold text-lg tracking-wide"
+                />
               </div>
               <div><label className="text-sm font-medium text-gray-600 mb-1 block">Karta</label>
-                <input type="number" value={cardAmt} onChange={e=>{setCard(e.target.value);setErr('');}} placeholder="0"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold text-lg"/>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={fmtInput(cardRaw)}
+                  onChange={e => handleCard(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold text-lg tracking-wide"
+                />
               </div>
               <div className={`flex justify-between px-4 py-2.5 rounded-xl text-sm font-medium ${Math.abs(cn+kn-total)<1?'bg-green-50 text-green-700':'bg-gray-50 text-gray-600'}`}>
                 <span>Jami</span><span>{fmt(cn+kn)} / {fmt(total)} so'm</span>
