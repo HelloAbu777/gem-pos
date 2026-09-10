@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
   Plus, Search, X, Package, Tag, Truck, Calendar,
   AlertTriangle, Barcode, Pencil, Trash2, Printer,
@@ -18,7 +18,11 @@ interface Product {
   category: Category; supplier: Supplier; createdAt: string;
 }
 
-const fmt     = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+type SaveForm = {
+  name: string; barcode: string; unit: string; quantity: string;
+  minQuantity: string; purchasePrice: string; salePrice: string;
+  vatType: string; expiryDate: string; categoryId: string; supplierId: string;
+};
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const VAT_LABELS: Record<string, string> = { NO_VAT: 'Soliqsiz', STANDARD: 'Standart', ZERO_VAT: '0%' };
 
@@ -113,13 +117,9 @@ function DetailModal({ product, onClose, onPrint }: {
    komponent qayta render bo'lib, autoFocus focus'ni o'g'irlaydi.
    Alohida state'lar bilan faqat tegishli input re-render bo'ladi.
 ───────────────────────────────────────────────────────────────── */
-function ProductModal({ open, onClose, onSave, initial, categories, suppliers }: {
+const ProductModal = memo(function ProductModal({ open, onClose, onSave, initial, categories, suppliers }: {
   open: boolean; onClose: () => void;
-  onSave: (data: {
-    name: string; barcode: string; unit: string; quantity: string;
-    minQuantity: string; purchasePrice: string; salePrice: string;
-    vatType: string; expiryDate: string; categoryId: string; supplierId: string;
-  }) => Promise<void>;
+  onSave: (data: SaveForm) => Promise<void>;
   initial?: Product | null;
   categories: Category[]; suppliers: Supplier[];
 }) {
@@ -284,7 +284,7 @@ function ProductModal({ open, onClose, onSave, initial, categories, suppliers }:
       </div>
     </div>
   );
-}
+});
 
 /* ── Main Page ── */
 export default function ProductsPage() {
@@ -317,11 +317,7 @@ export default function ProductsPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleSave = async (form: {
-    name: string; barcode: string; unit: string; quantity: string;
-    minQuantity: string; purchasePrice: string; salePrice: string;
-    vatType: string; expiryDate: string; categoryId: string; supplierId: string;
-  }, id?: string) => {
+  const handleSave = useCallback(async (form: SaveForm, id?: string) => {
     const url    = id ? `/api/products/${id}` : '/api/products';
     const method = id ? 'PUT' : 'POST';
     const res    = await fetch(url, {
@@ -330,14 +326,17 @@ export default function ProductsPage() {
     });
     if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Xatolik'); }
     await fetchAll();
-  };
+  }, [fetchAll]);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     setDeleteError('');
     const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
     if (res.ok) { setDeleteId(null); fetchAll(); }
     else { const d = await res.json(); setDeleteError(d.error || "O'chirishda xatolik"); }
-  };
+  }, [fetchAll]);
+
+  const handleAddSave = useCallback((form: SaveForm) => handleSave(form), [handleSave]);
+  const handleEditSave = useCallback((form: SaveForm) => handleSave(form, editTarget?.id), [handleSave, editTarget?.id]);
 
   const filtered = products.filter(p => {
     const ms = p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode ?? '').toLowerCase().includes(search.toLowerCase());
@@ -486,12 +485,12 @@ export default function ProductsPage() {
 
       {/* Add Modal */}
       <ProductModal open={addOpen} onClose={() => setAddOpen(false)}
-        onSave={form => handleSave(form)}
+        onSave={handleAddSave}
         categories={categories} suppliers={suppliers} />
 
       {/* Edit Modal */}
       <ProductModal open={!!editTarget} onClose={() => setEditTarget(null)}
-        onSave={form => handleSave(form, editTarget!.id)}
+        onSave={handleEditSave}
         initial={editTarget} categories={categories} suppliers={suppliers} />
 
       {/* Delete Confirm */}
