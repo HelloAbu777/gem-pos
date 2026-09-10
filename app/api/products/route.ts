@@ -67,6 +67,13 @@ export async function POST(request: NextRequest) {
       if (existing) return NextResponse.json({ error: 'Bu shtrix kod allaqachon mavjud' }, { status: 400 });
     }
 
+    // Branch mavjudligini ta'minlash (foreign key xatosidan himoya)
+    await prisma.branch.upsert({
+      where:  { id: branchId },
+      update: {},
+      create: { id: branchId, name: 'Asosiy filial' },
+    });
+
     const margin = Number(data.salePrice) - Number(data.purchasePrice);
 
     const newProduct = await prisma.product.create({
@@ -91,6 +98,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(newProduct, { status: 201 });
   } catch (error) {
     console.error('Mahsulot yaratishda xatolik:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    // Batafsil xato xabari
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
