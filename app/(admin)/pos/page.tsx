@@ -272,8 +272,8 @@ function PaymentModal({ total, onConfirm, onClose, processing, legalEntities }: 
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold text-lg tracking-wide"
                 />
               </div>
-              <div className={`flex justify-between px-4 py-2.5 rounded-xl text-sm font-medium ${Math.abs(cn+kn-total)<1?'bg-green-50 text-green-700':'bg-gray-50 text-gray-600'}`}>
-                <span>Jami</span><span>{fmt(cn+kn)} / {fmt(total)} so'm</span>
+              <div className={`flex justify-between px-4 py-2.5 rounded-xl text-sm font-medium ${Math.abs((Number(cashRaw)||0)+kn-total)<1?'bg-green-50 text-green-700':'bg-gray-50 text-gray-600'}`}>
+                <span>Jami</span><span>{fmt((Number(cashRaw)||0)+kn)} / {fmt(total)} so'm</span>
               </div>
             </div>
           )}
