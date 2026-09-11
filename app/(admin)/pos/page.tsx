@@ -139,33 +139,36 @@ function PaymentModal({ total, onConfirm, onClose, processing, legalEntities }: 
   processing: boolean;
   legalEntities: LegalEntity[];
 }) {
-  const [payType,    setPay]    = useState<PayType>('CASH');
-  const [cashRaw,    setCashRaw]   = useState('');
-  const [cardRaw,    setCardRaw]   = useState('');
-  const [err,        setErr]    = useState('');
-  const [isLE,       setIsLE]   = useState(false);
-  const [selectedLE, setLE]     = useState<string>('');
-  const cn = Number(cashRaw) || 0;
+  const [payType,    setPay]  = useState<PayType>('CASH');
+  const [cashRaw,    setCashRaw] = useState('');
+  const [cardRaw,    setCardRaw] = useState('');
+  const [err,        setErr]  = useState('');
+  const [isLE,       setIsLE] = useState(false);
+  const [selectedLE, setLE]   = useState<string>('');
   const kn = Number(cardRaw) || 0;
 
+  // MIXED uchun naqd inputi
   const handleCash = (v: string) => {
     const raw = rawNum(v);
     setCashRaw(raw);
-    if (payType === 'MIXED') setCardRaw(String(Math.max(0, total - (Number(raw) || 0))));
+    setCardRaw(String(Math.max(0, total - (Number(raw) || 0))));
     setErr('');
   };
   const handleCard = (v: string) => {
-    const raw = rawNum(v);
-    setCardRaw(raw);
+    setCardRaw(rawNum(v));
     setErr('');
   };
   const submit = () => {
     setErr('');
     if (isLE && !selectedLE) { setErr('Yuridik shaxsni tanlang'); return; }
     const leId = isLE ? selectedLE : null;
-    if (payType === 'CASH') { if (cn < total) { setErr('Naqd yetarli emas'); return; } onConfirm('CASH', total, 0, leId); }
+    if (payType === 'CASH')  { onConfirm('CASH', total, 0, leId); }
     else if (payType === 'CARD') { onConfirm('CARD', 0, total, leId); }
-    else { if (Math.abs(cn + kn - total) > 1) { setErr(`Naqd+Karta=${fmt(cn+kn)}, jami ${fmt(total)}`); return; } onConfirm('MIXED', cn, kn, leId); }
+    else {
+      const cn = Number(cashRaw) || 0;
+      if (Math.abs(cn + kn - total) > 1) { setErr(`Naqd+Karta=${fmt(cn+kn)}, jami ${fmt(total)}`); return; }
+      onConfirm('MIXED', cn, kn, leId);
+    }
   };
 
   return (
@@ -234,17 +237,10 @@ function PaymentModal({ total, onConfirm, onClose, processing, legalEntities }: 
             ))}
           </div>
           {payType==='CASH'&&(
-            <div className="space-y-3">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={fmtInput(cashRaw)}
-                onChange={e => handleCash(e.target.value)}
-                placeholder={fmt(total)}
-                autoFocus
-                className="w-full px-4 py-3 text-xl border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-900 outline-none font-bold tracking-wide"
-              />
-              {cn>=total&&<div className="flex justify-between px-4 py-3 bg-green-50 text-green-700 rounded-xl font-semibold"><span>Qaytim</span><span>{fmt(cn-total)} so'm</span></div>}
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+              <Banknote className="w-8 h-8 text-green-600 mx-auto mb-2"/>
+              <p className="text-green-700 font-bold text-2xl">{fmt(total)} so'm</p>
+              <p className="text-green-500 text-sm mt-1">Naqd to'lov</p>
             </div>
           )}
           {payType==='CARD'&&(
