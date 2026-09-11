@@ -14,29 +14,33 @@ interface SaleItemInput {
 }
 
 interface SaleRequest {
-  paymentType:   'CASH' | 'CARD' | 'MIXED';
-  cashAmount?:   number;
-  cardAmount?:   number;
+  paymentType:    'CASH' | 'CARD' | 'MIXED';
+  cashAmount?:    number;
+  cardAmount?:    number;
   legalEntityId?: string | null;
-  items:         SaleItemInput[];
+  items:          SaleItemInput[];
 }
 
-// Branch va User mavjud bo'lmasa yaratadi
+// Branch va default-cashier user mavjud bo'lmasa yaratadi
 async function ensureDefaults() {
   await prisma.branch.upsert({
     where:  { id: DEFAULT_BRANCH_ID },
     update: {},
     create: { id: DEFAULT_BRANCH_ID, name: 'Asosiy filial' },
   });
-  // Default user mavjudligini tekshir
+
   const userExists = await prisma.user.findUnique({ where: { id: DEFAULT_CASHIER_ID } });
   if (!userExists) {
     const bcrypt = await import('bcryptjs');
     const hash   = await bcrypt.hash('admin123', 10);
-    await prisma.user.upsert({
-      where:  { login: 'admin' },
-      update: {},
-      create: {
+    // login conflict bo'lmasligi uchun upsert
+    const existing = await prisma.user.findUnique({ where: { login: 'admin' } });
+    if (existing) {
+      // admin user bor lekin ID boshqa — shu user ni DEFAULT_CASHIER_ID sifatida ishlatamiz
+      return existing.id;
+    }
+    await prisma.user.create({
+      data: {
         id:       DEFAULT_CASHIER_ID,
         name:     'Admin',
         login:    'admin',
@@ -46,6 +50,23 @@ async function ensureDefaults() {
       },
     });
   }
+  return DEFAULT_CASHIER_ID;
+}
+
+// Cashier ID ni tekshiradi — DB da yo'q bo'lsa fallback qaytaradi
+async function resolvecashierId(userId: string | undefined): Promise<string> {
+  if (userId) {
+    const exists = await prisma.user.findUnique({ where: { id: userId } });
+    if (exists) return userId;
+  }
+  // userId yo'q yoki DB da topilmadi — default cashier
+  await ensureDefaults();
+  // admin login bilan user ni topamiz
+  const admin = await prisma.user.findFirst({
+    where: { OR: [{ id: DEFAULT_CASHIER_ID }, { login: 'admin' }] },
+  });
+  if (admin) return admin.id;
+  return DEFAULT_CASHIER_ID;
 }
 
 // POST - Yangi sotuv
@@ -57,11 +78,9 @@ export async function POST(request: NextRequest) {
     if (!data.items || data.items.length === 0)
       return NextResponse.json({ error: "Savat bo'sh" }, { status: 400 });
 
+    // Branch va cashier ID ni xavfsiz aniqlash
     const branchId  = session?.branchId || DEFAULT_BRANCH_ID;
-    const cashierId = session?.userId   || DEFAULT_CASHIER_ID;
-
-    // Default branch/user bo'lmasa yaratamiz
-    if (!session) await ensureDefaults();
+    const cashierId = await resolvecashierId(session?.userId);
 
     const totalAmount = data.items.reduce((s, i) => s + i.priceAtSale * i.quantity, 0);
 
@@ -82,8 +101,14 @@ export async function POST(request: NextRequest) {
       if (!le) return NextResponse.json({ error: 'Yuridik shaxs topilmadi' }, { status: 400 });
     }
 
+    // Branch ham mavjudligini ta'minlash
+    await prisma.branch.upsert({
+      where:  { id: branchId },
+      update: {},
+      create: { id: branchId, name: 'Asosiy filial' },
+    });
+
     const sale = await prisma.$transaction(async (tx) => {
-      // Mahsulot zaxirasini tekshirish
       for (const item of data.items) {
         if (!item.productId) continue;
         const product = await tx.product.findFirst({ where: { id: item.productId } });
@@ -118,7 +143,6 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Mahsulot zaxirasini kamaytirish
       for (const item of data.items) {
         if (!item.productId) continue;
         await tx.product.update({
