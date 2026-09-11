@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth/session';
 
-// GET - Bitta yuridik shaxs (sotuvlar tarixi bilan)
+// GET - Bitta yuridik shaxs
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     const { id } = await context.params;
 
     const entity = await prisma.legalEntity.findUnique({
@@ -20,7 +16,7 @@ export async function GET(
           orderBy: { createdAt: 'desc' },
           take: 20,
           include: {
-            cashier: { select: { name: true } },
+            cashier:   { select: { name: true } },
             saleItems: { select: { itemName: true, quantity: true, priceAtSale: true } },
           },
         },
@@ -28,7 +24,6 @@ export async function GET(
     });
 
     if (!entity) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 });
-
     return NextResponse.json(entity);
   } catch (error) {
     console.error('Legal entity GET error:', error);
@@ -42,18 +37,15 @@ export async function PUT(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     const { id } = await context.params;
     const { name, phone } = await request.json();
 
-    if (!name?.trim()) return NextResponse.json({ error: 'Ism kiritilmagan' }, { status: 400 });
+    if (!name?.trim())  return NextResponse.json({ error: 'Ism kiritilmagan' },   { status: 400 });
     if (!phone?.trim()) return NextResponse.json({ error: 'Telefon kiritilmagan' }, { status: 400 });
 
     const entity = await prisma.legalEntity.update({
       where: { id },
-      data: { name: name.trim(), phone: phone.trim() },
+      data:  { name: name.trim(), phone: phone.trim() },
     });
 
     return NextResponse.json(entity);
@@ -69,13 +61,8 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     const { id } = await context.params;
-
     await prisma.legalEntity.delete({ where: { id } });
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Legal entity DELETE error:', error);
