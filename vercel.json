@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npx prisma migrate deploy && next build --no-lint",
   "outputDirectory": ".next",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
