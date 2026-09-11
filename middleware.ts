@@ -7,7 +7,7 @@ const SECRET_KEY = new TextEncoder().encode(
 );
 
 // Public paths — these do not require authentication
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/admin/clear-db'];
+const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/admin/clear-db', '/api/admin/migrate'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
