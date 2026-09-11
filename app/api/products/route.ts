@@ -48,6 +48,16 @@ export async function POST(request: NextRequest) {
 
     await ensureBranch(DEFAULT_BRANCH_ID);
 
+    // expiryDate validatsiyasi — noto'g'ri sana bo'lsa null
+    let expiryDate: Date | null = null;
+    if (data.expiryDate) {
+      const d = new Date(data.expiryDate);
+      // Faqat 1900–2100 oralig'idagi sanalarni qabul qilish
+      if (!isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
+        expiryDate = d;
+      }
+    }
+
     const margin = Number(data.salePrice) - Number(data.purchasePrice);
 
     const product = await prisma.product.create({
@@ -61,7 +71,7 @@ export async function POST(request: NextRequest) {
         salePrice:     Number(data.salePrice),
         margin,
         vatType:       data.vatType    || 'NO_VAT',
-        expiryDate:    data.expiryDate ? new Date(data.expiryDate) : null,
+        expiryDate,
         categoryId:    data.categoryId,
         supplierId:    data.supplierId,
         branchId:      DEFAULT_BRANCH_ID,
