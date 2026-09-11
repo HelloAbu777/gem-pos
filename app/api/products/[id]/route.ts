@@ -23,6 +23,15 @@ export async function PUT(
 
     const margin = Number(data.salePrice) - Number(data.purchasePrice);
 
+    // expiryDate validatsiyasi — noto'g'ri sana bo'lsa null
+    let expiryDate: Date | null = null;
+    if (data.expiryDate) {
+      const d = new Date(data.expiryDate);
+      if (!isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
+        expiryDate = d;
+      }
+    }
+
     const product = await prisma.product.update({
       where: { id },
       data: {
@@ -35,7 +44,7 @@ export async function PUT(
         salePrice:     Number(data.salePrice),
         margin,
         vatType:       data.vatType       || 'NO_VAT',
-        expiryDate:    data.expiryDate ? new Date(data.expiryDate) : null,
+        expiryDate,
         categoryId:    data.categoryId,
         supplierId:    data.supplierId,
       },
