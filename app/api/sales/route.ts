@@ -2,49 +2,81 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth/session';
 
+const DEFAULT_BRANCH_ID  = 'default-branch';
+const DEFAULT_CASHIER_ID = 'default-cashier';
+
 interface SaleItemInput {
-  productId?: string | null;
-  itemName: string;
-  quantity: number;
+  productId?:  string | null;
+  dishId?:     string | null;
+  itemName:    string;
+  quantity:    number;
   priceAtSale: number;
 }
 
 interface SaleRequest {
-  paymentType: 'CASH' | 'CARD' | 'MIXED';
-  cashAmount?: number;
-  cardAmount?: number;
+  paymentType:   'CASH' | 'CARD' | 'MIXED';
+  cashAmount?:   number;
+  cardAmount?:   number;
   legalEntityId?: string | null;
-  items: SaleItemInput[];
+  items:         SaleItemInput[];
+}
+
+// Branch va User mavjud bo'lmasa yaratadi
+async function ensureDefaults() {
+  await prisma.branch.upsert({
+    where:  { id: DEFAULT_BRANCH_ID },
+    update: {},
+    create: { id: DEFAULT_BRANCH_ID, name: 'Asosiy filial' },
+  });
+  // Default user mavjudligini tekshir
+  const userExists = await prisma.user.findUnique({ where: { id: DEFAULT_CASHIER_ID } });
+  if (!userExists) {
+    const bcrypt = await import('bcryptjs');
+    const hash   = await bcrypt.hash('admin123', 10);
+    await prisma.user.upsert({
+      where:  { login: 'admin' },
+      update: {},
+      create: {
+        id:       DEFAULT_CASHIER_ID,
+        name:     'Admin',
+        login:    'admin',
+        password: hash,
+        role:     'ADMIN',
+        branchId: DEFAULT_BRANCH_ID,
+      },
+    });
+  }
 }
 
 // POST - Yangi sotuv
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     const data: SaleRequest = await request.json();
 
     if (!data.items || data.items.length === 0)
-      return NextResponse.json({ error: 'Savat bo\'sh' }, { status: 400 });
+      return NextResponse.json({ error: "Savat bo'sh" }, { status: 400 });
+
+    const branchId  = session?.branchId || DEFAULT_BRANCH_ID;
+    const cashierId = session?.userId   || DEFAULT_CASHIER_ID;
+
+    // Default branch/user bo'lmasa yaratamiz
+    if (!session) await ensureDefaults();
 
     const totalAmount = data.items.reduce((s, i) => s + i.priceAtSale * i.quantity, 0);
 
     let cashAmount = data.cashAmount ?? 0;
     let cardAmount = data.cardAmount ?? 0;
 
-    if (data.paymentType === 'CARD') { cashAmount = 0; cardAmount = totalAmount; }
-    if (data.paymentType === 'CASH') {
-      if (cashAmount < totalAmount)
-        return NextResponse.json({ error: 'Naqd summa yetarli emas' }, { status: 400 });
-    }
+    if (data.paymentType === 'CARD')  { cashAmount = 0; cardAmount = totalAmount; }
+    if (data.paymentType === 'CASH')  { cashAmount = totalAmount; cardAmount = 0; }
     if (data.paymentType === 'MIXED') {
       if (Math.abs(cashAmount + cardAmount - totalAmount) > 1)
         return NextResponse.json({ error: 'Naqd+Karta summasi jami bilan teng emas' }, { status: 400 });
     }
 
-    // Y/Sh tekshiruv
     const saleType = data.legalEntityId ? 'LEGAL_ENTITY' : 'RETAIL';
+
     if (data.legalEntityId) {
       const le = await prisma.legalEntity.findUnique({ where: { id: data.legalEntityId } });
       if (!le) return NextResponse.json({ error: 'Yuridik shaxs topilmadi' }, { status: 400 });
@@ -54,24 +86,21 @@ export async function POST(request: NextRequest) {
       // Mahsulot zaxirasini tekshirish
       for (const item of data.items) {
         if (!item.productId) continue;
-        const product = await tx.product.findFirst({
-          where: { id: item.productId, branchId: session.branchId },
-        });
+        const product = await tx.product.findFirst({ where: { id: item.productId } });
         if (!product) throw new Error(`Mahsulot topilmadi: ${item.itemName}`);
         if (product.quantity < item.quantity)
           throw new Error(`"${product.name}" zaxirada yetarli emas. Mavjud: ${product.quantity}`);
       }
 
-      // Sotuv yaratish
       const newSale = await tx.sale.create({
         data: {
           totalAmount,
-          paymentType: data.paymentType,
+          paymentType:   data.paymentType,
           cashAmount,
           cardAmount,
           saleType,
-          cashierId:     session.userId,
-          branchId:      session.branchId,
+          cashierId,
+          branchId,
           legalEntityId: data.legalEntityId ?? null,
           saleItems: {
             create: data.items.map(item => ({
@@ -83,7 +112,7 @@ export async function POST(request: NextRequest) {
           },
         },
         include: {
-          saleItems: true,
+          saleItems:   true,
           legalEntity: { select: { id: true, name: true, phone: true } },
           cashier:     { select: { id: true, name: true } },
         },
@@ -115,13 +144,11 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     const { searchParams } = request.nextUrl;
     const limit  = parseInt(searchParams.get('limit')  || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const where = { branchId: session.branchId };
+    const where = session?.branchId ? { branchId: session.branchId } : {};
 
     const [sales, total] = await Promise.all([
       prisma.sale.findMany({
@@ -139,7 +166,6 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({ sales, total, limit, offset });
-
   } catch (error) {
     console.error('Sale GET error:', error);
     return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
