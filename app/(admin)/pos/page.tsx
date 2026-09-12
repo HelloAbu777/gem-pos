@@ -12,6 +12,7 @@ interface Product {
   id: string; name: string; barcode?: string;
   salePrice: number; purchasePrice: number;
   quantity: number; minQuantity: number; unit: string;
+  isPinned?: boolean;
   category: { id: string; name: string };
 }
 interface Dish {
@@ -505,6 +506,9 @@ export default function PosPage() {
     const matchSearch = !q || p.name.toLowerCase().includes(q) || (p.barcode?.toLowerCase().includes(q) ?? false);
     const matchCat    = showAll || p.category.id === catFilter;
     return matchSearch && matchCat;
+  }).sort((a, b) => {
+    if ((b.isPinned ? 1 : 0) !== (a.isPinned ? 1 : 0)) return (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0);
+    return a.name.localeCompare(b.name);
   });
 
   // Taomlar: "all" da ham, "Taomlar" da ham ko'rinadi
@@ -590,6 +594,7 @@ export default function PosPage() {
                     <button key={`prod-${p.id}`} onClick={()=>addProduct(p)} disabled={out}
                       className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${out?'opacity-40 cursor-not-allowed border-gray-200':ic?'border-gray-900 ring-1 ring-gray-900':'border-gray-200 hover:border-gray-400'}`}>
                       {ic&&<span className="absolute -top-2 -right-2 bg-gray-900 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{ic.qty}</span>}
+                      {p.isPinned&&<span className="absolute top-1.5 left-1.5 text-yellow-400 text-xs leading-none">⭐</span>}
                       <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto"><Package className="w-5 h-5 text-gray-400"/></div>
                       <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{p.name}</p>
                       <p className="text-sm font-bold text-gray-900 text-center">{fmt(p.salePrice)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
