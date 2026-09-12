@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// PUT - Mahsulotni tahrirlash
 export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -57,7 +58,7 @@ export async function PUT(
   }
 }
 
-// PATCH - Pin/Unpin mahsulot
+// PATCH - Pin/Unpin mahsulot (kassada birinchi ko'rsatish)
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -66,7 +67,6 @@ export async function PATCH(
     const { id } = await context.params;
     const { isPinned } = await request.json();
 
-    // isPinned column mavjudligini tekshirib, yo'q bo'lsa false qaytaramiz
     try {
       const product = await prisma.product.update({
         where: { id },
@@ -75,9 +75,9 @@ export async function PATCH(
       });
       return NextResponse.json(product);
     } catch {
-      // isPinned column yo'q bo'lsa — raw SQL bilan qo'shamiz
+      // isPinned column yo'q bo'lsa — qo'shamiz va qayta urinib ko'ramiz
       await prisma.$executeRawUnsafe(
-        `ALTER TABLE products ADD COLUMN IF NOT EXISTS "isPinned" BOOLEAN NOT NULL DEFAULT false`
+        `ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "isPinned" BOOLEAN NOT NULL DEFAULT false`
       );
       const product = await prisma.product.update({
         where: { id },
@@ -93,6 +93,7 @@ export async function PATCH(
   }
 }
 
+// DELETE - Mahsulotni o'chirish
 export async function DELETE(
   _req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -100,89 +101,6 @@ export async function DELETE(
   try {
     const { id } = await context.params;
 
-    const saleCount = await prisma.saleItem.count({ where: { productId: id } });
-    if (saleCount > 0) {
-      return NextResponse.json(
-        { error: `Bu mahsulot ${saleCount} ta sotuvda ishlatilgan. O'chirib bo'lmaydi.` },
-        { status: 400 }
-      );
-    }
-
-    await prisma.product.delete({ where: { id } });
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Product DELETE error:', error);
-    const msg = error instanceof Error ? error.message : 'Server xatosi';
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
-}
-
-export async function PUT(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await context.params;
-    const data    = await request.json();
-
-    if (!data.name?.trim())  return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
-    if (!data.salePrice)     return NextResponse.json({ error: 'Sotish narxi kiritilmagan' }, { status: 400 });
-    if (!data.purchasePrice) return NextResponse.json({ error: 'Kelish narxi kiritilmagan' }, { status: 400 });
-
-    // Barcode unique (o'zidan tashqari)
-    if (data.barcode?.trim()) {
-      const ex = await prisma.product.findFirst({
-        where: { barcode: data.barcode.trim(), id: { not: id } },
-      });
-      if (ex) return NextResponse.json({ error: 'Bu barcode allaqachon mavjud' }, { status: 400 });
-    }
-
-    const margin = Number(data.salePrice) - Number(data.purchasePrice);
-
-    // expiryDate validatsiyasi — noto'g'ri sana bo'lsa null
-    let expiryDate: Date | null = null;
-    if (data.expiryDate) {
-      const d = new Date(data.expiryDate);
-      if (!isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
-        expiryDate = d;
-      }
-    }
-
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
-        name:          data.name.trim(),
-        barcode:       data.barcode?.trim() || null,
-        unit:          data.unit          || 'dona',
-        quantity:      Number(data.quantity)      || 0,
-        minQuantity:   Number(data.minQuantity)   || 10,
-        purchasePrice: Number(data.purchasePrice),
-        salePrice:     Number(data.salePrice),
-        margin,
-        vatType:       data.vatType       || 'NO_VAT',
-        expiryDate,
-        categoryId:    data.categoryId,
-        supplierId:    data.supplierId,
-      },
-      include: { category: true, supplier: true },
-    });
-
-    return NextResponse.json(product);
-  } catch (error) {
-    console.error('Product PUT error:', error);
-    const msg = error instanceof Error ? error.message : 'Server xatosi';
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
-}
-
-export async function DELETE(
-  _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await context.params;
-
-    // Sotilgan mahsulotlar bor bo'lsa xabar ber
     const saleCount = await prisma.saleItem.count({ where: { productId: id } });
     if (saleCount > 0) {
       return NextResponse.json(
