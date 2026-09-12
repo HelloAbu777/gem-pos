@@ -19,62 +19,60 @@ export async function GET(request: NextRequest) {
     const end   = new Date(endDate);
     end.setHours(23, 59, 59, 999);
 
-    // Previous period dates
-    const daysDiff = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
-    const prevStart = new Date(start);
-    prevStart.setDate(prevStart.getDate() - daysDiff);
-    const prevEnd = new Date(end);
-    prevEnd.setDate(prevEnd.getDate() - daysDiff);
+    const daysDiff  = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+    const prevStart = new Date(start); prevStart.setDate(prevStart.getDate() - daysDiff);
+    const prevEnd   = new Date(end);   prevEnd.setDate(prevEnd.getDate() - daysDiff);
 
-    const whereBase  = { createdAt: { gte: start, lte: end },  ...(branchId ? { branchId } : {}) };
-    const wherePrev  = { createdAt: { gte: prevStart, lte: prevEnd }, ...(branchId ? { branchId } : {}) };
+    const whereBase = { createdAt: { gte: start, lte: end }, ...(branchId ? { branchId } : {}) };
+    const wherePrev = { createdAt: { gte: prevStart, lte: prevEnd }, ...(branchId ? { branchId } : {}) };
 
-    const [sales, previousSales] = await Promise.all([
-      prisma.sale.findMany({
-        where: whereBase,
+    const selectFields = {
+      id:            true,
+      totalAmount:   true,
+      paymentType:   true,
+      cashAmount:    true,
+      cardAmount:    true,
+      saleType:      true,
+      legalEntityId: true,
+      createdAt:     true,
+      saleItems: {
         select: {
-          id:           true,
-          totalAmount:  true,
-          paymentType:  true,
-          cashAmount:   true,
-          cardAmount:   true,
-          saleType:     true,
-          legalEntityId:true,
-          createdAt:    true,
-          saleItems: {
-            select: {
-              productId:   true,
-              itemName:    true,
-              quantity:    true,
-              priceAtSale: true,
-              product: {
-                select: { name: true, purchasePrice: true },
-              },
-            },
-          },
+          productId:   true,
+          itemName:    true,
+          quantity:    true,
+          priceAtSale: true,
+          product: { select: { name: true, purchasePrice: true } },
         },
-      }),
-      prisma.sale.findMany({ where: wherePrev, select: { totalAmount: true } }),
+      },
+    } as const;
+
+    const [allSales, previousSales] = await Promise.all([
+      prisma.sale.findMany({ where: whereBase, select: selectFields }),
+      prisma.sale.findMany({ where: wherePrev, select: { totalAmount: true, saleType: true, legalEntityId: true } }),
     ]);
 
-    // Revenue
-    const totalRevenue = sales.reduce((s, x) => s + x.totalAmount, 0);
+    // ── Ikki guruhga ajratish ──────────────────────────────────────
+    const leSales     = allSales.filter(s => s.saleType === 'LEGAL_ENTITY' || s.legalEntityId != null);
+    const retailSales = allSales.filter(s => s.saleType !== 'LEGAL_ENTITY' && s.legalEntityId == null);
 
-    const totalCash = sales.reduce((s, x) => {
+    // ── Oddiy savdo ko'rsatkichlari ───────────────────────────────
+    const totalRevenue = retailSales.reduce((s, x) => s + x.totalAmount, 0);
+
+    const totalCash = retailSales.reduce((s, x) => {
       if (x.paymentType === 'CASH')  return s + (x.cashAmount ?? x.totalAmount);
       if (x.paymentType === 'MIXED') return s + (x.cashAmount ?? 0);
       return s;
     }, 0);
 
-    const totalCard = sales.reduce((s, x) => {
+    const totalCard = retailSales.reduce((s, x) => {
       if (x.paymentType === 'CARD')  return s + (x.cardAmount ?? x.totalAmount);
       if (x.paymentType === 'MIXED') return s + (x.cardAmount ?? 0);
       return s;
     }, 0);
 
-    // Net profit (only product items have purchasePrice)
+    // ── Sof foyda (faqat retail) ──────────────────────────────────
     let totalCost = 0;
-    for (const sale of sales) {
+    for (const sale of retailSales) {
       for (const item of sale.saleItems) {
         if (item.product?.purchasePrice) {
           totalCost += item.product.purchasePrice * item.quantity;
@@ -83,19 +81,18 @@ export async function GET(request: NextRequest) {
     }
     const netProfit = totalRevenue - totalCost;
 
-    // Change vs previous
-    const prevRevenue   = previousSales.reduce((s, x) => s + x.totalAmount, 0);
-    const revenueChange = prevRevenue > 0
-      ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0;
+    // ── O'tgan davr bilan solishtirish (faqat retail) ─────────────
+    const prevRetailSales = previousSales.filter(s => s.saleType !== 'LEGAL_ENTITY' && s.legalEntityId == null);
+    const prevRevenue     = prevRetailSales.reduce((s, x) => s + x.totalAmount, 0);
+    const revenueChange   = prevRevenue > 0 ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0;
 
-    // Y/Sh savdolar — legalEntityId yoki saleType bo'yicha
-    const leSales   = sales.filter(s => s.saleType === 'LEGAL_ENTITY' || s.legalEntityId != null);
+    // ── Y/Sh ko'rsatkichlari ──────────────────────────────────────
     const leRevenue = leSales.reduce((s, x) => s + x.totalAmount, 0);
     const leCount   = leSales.length;
 
-    // Top selling products
+    // ── Eng ko'p sotilgan mahsulotlar (barcha savdolardan) ────────
     const prodMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
-    for (const sale of sales) {
+    for (const sale of allSales) {
       for (const item of sale.saleItems) {
         if (!item.productId) continue;
         const nm = item.product?.name ?? item.itemName;
@@ -108,13 +105,13 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
 
-    // Daily sales chart
+    // ── Savdo dinamikasi (faqat retail) ──────────────────────────
     const dailySales: { date: string; revenue: number }[] = [];
     const cur = new Date(start);
     while (cur <= end) {
       const ds = new Date(cur); ds.setHours(0, 0, 0, 0);
       const de = new Date(cur); de.setHours(23, 59, 59, 999);
-      const rev = sales
+      const rev = retailSales
         .filter(s => s.createdAt >= ds && s.createdAt <= de)
         .reduce((s, x) => s + x.totalAmount, 0);
       dailySales.push({ date: cur.toISOString().split('T')[0], revenue: rev });
@@ -123,13 +120,19 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       stats: {
-        totalRevenue, totalCash, totalCard,
-        netProfit, revenueChange,
-        salesCount:          sales.length,
-        legalEntityRevenue:  leRevenue,
-        legalEntityCount:    leCount,
-        retailRevenue:       totalRevenue - leRevenue,
-        retailCount:         sales.length - leCount,
+        // Oddiy savdo (retail) ko'rsatkichlari
+        totalRevenue,
+        totalCash,
+        totalCard,
+        netProfit,
+        revenueChange,
+        salesCount:   retailSales.length,
+        // Y/Sh alohida
+        legalEntityRevenue: leRevenue,
+        legalEntityCount:   leCount,
+        // Retail vs Y/Sh
+        retailRevenue: totalRevenue,
+        retailCount:   retailSales.length,
       },
       topProducts,
       dailySales,
