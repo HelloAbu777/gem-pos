@@ -29,17 +29,18 @@ export async function GET(request: NextRequest) {
     const whereBase  = { createdAt: { gte: start, lte: end },  ...(branchId ? { branchId } : {}) };
     const wherePrev  = { createdAt: { gte: prevStart, lte: prevEnd }, ...(branchId ? { branchId } : {}) };
 
-    // Fetch sales — select only safe fields (saleType may not exist in prod DB)
     const [sales, previousSales] = await Promise.all([
       prisma.sale.findMany({
         where: whereBase,
         select: {
-          id:          true,
-          totalAmount: true,
-          paymentType: true,
-          cashAmount:  true,
-          cardAmount:  true,
-          createdAt:   true,
+          id:           true,
+          totalAmount:  true,
+          paymentType:  true,
+          cashAmount:   true,
+          cardAmount:   true,
+          saleType:     true,
+          legalEntityId:true,
+          createdAt:    true,
           saleItems: {
             select: {
               productId:   true,
@@ -87,9 +88,8 @@ export async function GET(request: NextRequest) {
     const revenueChange = prevRevenue > 0
       ? ((totalRevenue - prevRevenue) / prevRevenue) * 100 : 0;
 
-    // Y/Sh — safe access with optional chaining
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const leSales   = sales.filter(s => (s as any).saleType === 'LEGAL_ENTITY');
+    // Y/Sh savdolar — legalEntityId yoki saleType bo'yicha
+    const leSales   = sales.filter(s => s.saleType === 'LEGAL_ENTITY' || s.legalEntityId != null);
     const leRevenue = leSales.reduce((s, x) => s + x.totalAmount, 0);
     const leCount   = leSales.length;
 
