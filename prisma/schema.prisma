@@ -83,6 +83,7 @@ model Product {
   margin         Float       // Marja (avtomatik hisoblanadi)
   vatType        VATType     @default(NO_VAT)
   expiryDate     DateTime?   // Yaroqlilik muddati
+  isPinned       Boolean     @default(false) // Kassa boshida ko'rsatish
   categoryId     String
   category       Category    @relation(fields: [categoryId], references: [id])
   supplierId     String
