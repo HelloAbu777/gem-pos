@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
   Plus, Search, X, Package, Tag, Truck, Calendar,
-  AlertTriangle, Barcode, Pencil, Trash2, Printer,
+  AlertTriangle, Barcode, Pencil, Trash2, Printer, Star,
 } from 'lucide-react';
 import BarcodePrintModal from '@/components/ui/BarcodePrintModal';
 
@@ -15,6 +15,7 @@ interface Product {
   unit: string; quantity: number; minQuantity: number;
   purchasePrice: number; salePrice: number; margin: number;
   vatType: string; expiryDate?: string | null;
+  isPinned: boolean;
   category: Category; supplier: Supplier; createdAt: string;
 }
 
@@ -342,6 +343,17 @@ export default function ProductsPage() {
   const handleAddSave = useCallback((form: SaveForm) => handleSave(form), [handleSave]);
   const handleEditSave = useCallback((form: SaveForm) => handleSave(form, editTarget?.id), [handleSave, editTarget?.id]);
 
+  const handlePin = useCallback(async (id: string, current: boolean) => {
+    try {
+      await fetch(`/api/products/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPinned: !current }),
+      });
+      await fetchAll();
+    } catch (e) { console.error(e); }
+  }, [fetchAll]);
+
   const filtered = products.filter(p => {
     const ms = p.name.toLowerCase().includes(search.toLowerCase()) || (p.barcode ?? '').toLowerCase().includes(search.toLowerCase());
     const mf = statusFilter === 'all'
@@ -463,6 +475,12 @@ export default function ProductsPage() {
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => setSelected(p)} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
                             <Barcode className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handlePin(p.id, p.isPinned ?? false)}
+                            title={p.isPinned ? "Pinneddan olib tashlash" : "Kassada birinchi ko'rsatish"}
+                            className={`p-1.5 rounded-lg transition-colors ${p.isPinned ? 'text-yellow-500 bg-yellow-50 hover:bg-yellow-100' : 'text-gray-400 hover:text-yellow-500 hover:bg-yellow-50'}`}>
+                            <Star className={`w-4 h-4 ${p.isPinned ? 'fill-yellow-400' : ''}`} />
                           </button>
                           <button onClick={() => setEditTarget(p)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                             <Pencil className="w-4 h-4" />
