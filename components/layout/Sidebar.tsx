@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   Building2,
   UtensilsCrossed,
+  Warehouse,
   LogOut 
 } from 'lucide-react';
 import { useState } from 'react';
@@ -17,6 +18,7 @@ const menuItems = [
   { name: 'Dashboard',        href: '/dashboard',       icon: LayoutDashboard },
   { name: 'Mahsulotlar',      href: '/products',        icon: Package },
   { name: 'Taomlar',          href: '/dishes',          icon: UtensilsCrossed },
+  { name: 'Ombor',            href: '/warehouse',       icon: Warehouse },
   { name: 'Yuridik Shaxslar', href: '/legal-entities',  icon: Building2 },
   { name: 'Statistika',       href: '/statistics',      icon: BarChart3 },
   { name: 'Kassa (POS)',      href: '/pos',             icon: ShoppingCart },
@@ -51,8 +53,9 @@ export default function Sidebar() {
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || 
-            (item.href !== '/products' && pathname?.startsWith(item.href + '/')) ||
-            (item.href === '/products' && (pathname === '/products' || pathname?.startsWith('/products/')));
+            (item.href !== '/products' && item.href !== '/warehouse' && pathname?.startsWith(item.href + '/')) ||
+            (item.href === '/products' && (pathname === '/products' || pathname?.startsWith('/products/'))) ||
+            (item.href === '/warehouse' && (pathname === '/warehouse' || pathname?.startsWith('/warehouse/')));
           
           return (
             <Link
