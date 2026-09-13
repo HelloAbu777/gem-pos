@@ -73,6 +73,10 @@ export async function GET(request: NextRequest) {
     await prisma.$executeRawUnsafe(`INSERT INTO "users" ("id","name","login","password","role","branchId","updatedAt") VALUES ('default-cashier','Admin','admin','${hash}','ADMIN','default-branch',NOW()) ON CONFLICT ("login") DO NOTHING;`);
     steps.push('seed_admin');
 
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "warehouse_items" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "barcode" TEXT, "unit" TEXT NOT NULL DEFAULT 'dona', "quantity" DOUBLE PRECISION NOT NULL DEFAULT 0, "purchasePrice" DOUBLE PRECISION NOT NULL DEFAULT 0, "description" TEXT, "categoryId" TEXT, "supplierId" TEXT, "branchId" TEXT NOT NULL DEFAULT 'default-branch', "transferredAt" TIMESTAMP(3), "isTransferred" BOOLEAN NOT NULL DEFAULT false, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "warehouse_items_pkey" PRIMARY KEY ("id"));`);
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "warehouse_items_barcode_key" ON "warehouse_items"("barcode");`);
+    steps.push('warehouse_items');
+
     // Prisma migrations table
     await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "_prisma_migrations" ("id" VARCHAR(36) NOT NULL, "checksum" VARCHAR(64) NOT NULL, "finished_at" TIMESTAMPTZ, "migration_name" VARCHAR(255) NOT NULL, "logs" TEXT, "rolled_back_at" TIMESTAMPTZ, "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(), "applied_steps_count" INTEGER NOT NULL DEFAULT 0, CONSTRAINT "_prisma_migrations_pkey" PRIMARY KEY ("id"));`);
     steps.push('prisma_migrations_table');
