@@ -556,12 +556,26 @@ export default function PosPage() {
                 placeholder="Nomi yoki barkod..."
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none"/>
             </div>
-            <select value={catFilter} onChange={e=>setCatFilter(e.target.value)}
+            {/* Kategoriya select */}
+            <select value={catFilter==='__dishes__'?'all':catFilter} onChange={e=>setCatFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-gray-900 outline-none">
               <option value="all">Barcha mahsulotlar</option>
               {categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-              {dishes.length>0&&<option value={DISHES_CAT}>🍽 Taomlar ({dishes.length})</option>}
             </select>
+            {/* Ovqatlar — alohida tugma */}
+            {dishes.length>0&&(
+              <button
+                onClick={()=>setCatFilter(v=>v===DISHES_CAT?'all':DISHES_CAT)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-all flex-shrink-0 ${
+                  catFilter===DISHES_CAT
+                    ?'bg-orange-500 text-white border-orange-500 shadow-md'
+                    :'bg-white text-orange-600 border-orange-300 hover:bg-orange-50'
+                }`}>
+                <UtensilsCrossed className="w-4 h-4"/>
+                Ovqatlar
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${catFilter===DISHES_CAT?'bg-orange-400 text-white':'bg-orange-100 text-orange-600'}`}>{dishes.length}</span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -584,7 +598,7 @@ export default function PosPage() {
                 <p>Mahsulot yoki taom topilmadi</p>
               </div>
             ):(
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-4">
 
                 {/* Mahsulotlar */}
                 {filteredProds.map(p=>{
@@ -592,27 +606,35 @@ export default function PosPage() {
                   const out=p.quantity<=0;
                   return(
                     <button key={`prod-${p.id}`} onClick={()=>addProduct(p)} disabled={out}
-                      className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${out?'opacity-40 cursor-not-allowed border-gray-200':ic?'border-gray-900 ring-1 ring-gray-900':'border-gray-200 hover:border-gray-400'}`}>
-                      {ic&&<span className="absolute -top-2 -right-2 bg-gray-900 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{ic.qty}</span>}
-                      {p.isPinned&&<span className="absolute top-1.5 left-1.5 text-yellow-400 text-xs leading-none">⭐</span>}
-                      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto"><Package className="w-5 h-5 text-gray-400"/></div>
-                      <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{p.name}</p>
-                      <p className="text-sm font-bold text-gray-900 text-center">{fmt(p.salePrice)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
-                      <p className={`text-xs text-center mt-0.5 ${out?'text-red-500':p.quantity<=p.minQuantity?'text-orange-500':'text-gray-400'}`}>{out?'Tugagan':`${p.quantity} ${p.unit}`}</p>
+                      className={`relative bg-white border rounded-2xl p-4 text-left hover:shadow-lg active:scale-95 transition-all ${out?'opacity-40 cursor-not-allowed border-gray-200':ic?'border-gray-900 ring-2 ring-gray-900':'border-gray-200 hover:border-gray-400'}`}>
+                      {ic&&<span className="absolute -top-2.5 -right-2.5 bg-gray-900 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow">{ic.qty}</span>}
+                      {p.isPinned&&<span className="absolute top-2 left-2 text-yellow-400 text-sm leading-none">⭐</span>}
+                      <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mb-3 mx-auto">
+                        <Package className="w-7 h-7 text-gray-400"/>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 line-clamp-2 text-center mb-1.5 leading-snug">{p.name}</p>
+                      <p className="text-base font-extrabold text-gray-900 text-center">{fmt(p.salePrice)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
+                      <p className={`text-xs text-center mt-1 font-medium ${out?'text-red-500':p.quantity<=p.minQuantity?'text-orange-500':'text-gray-400'}`}>{out?'Tugagan':`${p.quantity} ${p.unit}`}</p>
                     </button>
                   );
                 })}
 
-                {/* Taomlar — mahsulotlar bilan birga */}
+                {/* Taomlar */}
                 {filteredDishes.map(d=>{
                   const ic=cart.find(i=>i.cartKey===`dish-${d.id}`);
                   return(
                     <button key={`dish-${d.id}`} onClick={()=>addDish(d)}
-                      className={`relative bg-white border rounded-xl p-3 text-left hover:shadow-md active:scale-95 transition-all ${ic?'border-orange-400 ring-1 ring-orange-400':'border-gray-200 hover:border-orange-300'}`}>
-                      {ic&&<span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">{ic.qty}</span>}
-                      <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mb-2.5 mx-auto"><UtensilsCrossed className="w-5 h-5 text-orange-500"/></div>
-                      <p className="text-xs font-semibold text-gray-900 line-clamp-2 text-center mb-1">{d.name}</p>
-                      <p className="text-sm font-bold text-gray-900 text-center">{fmt(d.price)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
+                      className={`relative bg-white border rounded-2xl p-4 text-left hover:shadow-lg active:scale-95 transition-all ${ic?'border-orange-500 ring-2 ring-orange-500':'border-gray-200 hover:border-orange-300'}`}>
+                      {ic&&<span className="absolute -top-2.5 -right-2.5 bg-orange-500 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow">{ic.qty}</span>}
+                      <div className="w-14 h-14 bg-orange-100 rounded-xl flex items-center justify-center mb-3 mx-auto">
+                        <UtensilsCrossed className="w-7 h-7 text-orange-500"/>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 line-clamp-2 text-center mb-1.5 leading-snug">{d.name}</p>
+                      <p className="text-base font-extrabold text-gray-900 text-center">{fmt(d.price)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
+                      <p className="text-xs text-center mt-1 text-orange-500 font-medium">🍽 taom</p>
+                    </button>
+                  );
+                })}lassName="text-sm font-bold text-gray-900 text-center">{fmt(d.price)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
                       <p className="text-xs text-center mt-0.5 text-orange-500 font-medium">🍽 taom</p>
                     </button>
                   );
@@ -623,11 +645,11 @@ export default function PosPage() {
           </div>
 
           {/* Cart */}
-          <div className="w-80 xl:w-96 bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
-            <div className="px-4 py-3.5 border-b border-gray-200 flex items-center justify-between">
+          <div className="w-96 xl:w-[440px] bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5 text-gray-700"/>
-                <span className="font-bold text-gray-900">Savat</span>
+                <span className="font-bold text-gray-900 text-base">Savat</span>
                 {cartCount>0&&<span className="bg-gray-900 text-white text-xs font-bold px-2 py-0.5 rounded-full">{cartCount}</span>}
               </div>
               {cart.length>0&&<button onClick={()=>setCart([])} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"><Trash2 className="w-3.5 h-3.5"/>Tozalash</button>}
@@ -635,27 +657,27 @@ export default function PosPage() {
             <div className="flex-1 overflow-y-auto">
               {cart.length===0?(
                 <div className="flex flex-col items-center justify-center h-full text-gray-300 py-10">
-                  <ShoppingCart className="w-12 h-12 mb-3"/>
-                  <p className="text-sm">Savat bo&apos;sh</p>
+                  <ShoppingCart className="w-14 h-14 mb-3"/>
+                  <p className="text-sm font-medium">Savat bo&apos;sh</p>
                   <p className="text-xs mt-1 text-gray-400">Mahsulot bosing yoki barkod skanerlang</p>
                 </div>
               ):(
                 <div className="divide-y divide-gray-100">
                   {cart.map(item=>(
-                    <div key={item.cartKey} className="px-4 py-3 flex items-center gap-3">
-                      <button onClick={()=>setCart(p=>p.filter(i=>i.cartKey!==item.cartKey))} className="text-gray-300 hover:text-red-500 flex-shrink-0"><X className="w-4 h-4"/></button>
-                      <div className="flex-shrink-0">{item.type==='dish'?<UtensilsCrossed className="w-4 h-4 text-orange-400"/>:<Package className="w-4 h-4 text-gray-400"/>}</div>
+                    <div key={item.cartKey} className="px-4 py-3.5 flex items-center gap-3">
+                      <button onClick={()=>setCart(p=>p.filter(i=>i.cartKey!==item.cartKey))} className="text-gray-300 hover:text-red-500 flex-shrink-0 p-0.5"><X className="w-4 h-4"/></button>
+                      <div className="flex-shrink-0">{item.type==='dish'?<UtensilsCrossed className="w-5 h-5 text-orange-400"/>:<Package className="w-5 h-5 text-gray-400"/>}</div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
-                        <p className="text-xs text-gray-400">{fmt(item.salePrice)} so'm</p>
+                        <p className="text-sm font-bold text-gray-900 leading-tight">{item.name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{fmt(item.salePrice)} so'm / dona</p>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button onClick={()=>updateQty(item.cartKey,-1)} className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100"><Minus className="w-3 h-3"/></button>
-                        <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
-                        <button onClick={()=>updateQty(item.cartKey,1)} disabled={item.type==='product'&&item.qty>=item.stockQty} className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-30"><Plus className="w-3 h-3"/></button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button onClick={()=>updateQty(item.cartKey,-1)} className="w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100 hover:border-gray-400 transition-colors"><Minus className="w-3.5 h-3.5"/></button>
+                        <span className="w-7 text-center text-base font-bold text-gray-900">{item.qty}</span>
+                        <button onClick={()=>updateQty(item.cartKey,1)} disabled={item.type==='product'&&item.qty>=item.stockQty} className="w-7 h-7 rounded-full border-2 border-gray-300 flex items-center justify-center hover:bg-gray-100 hover:border-gray-400 transition-colors disabled:opacity-30"><Plus className="w-3.5 h-3.5"/></button>
                       </div>
-                      <div className="text-right flex-shrink-0 w-20">
-                        <p className="text-sm font-bold text-gray-900">{fmt(item.salePrice*item.qty)}</p>
+                      <div className="text-right flex-shrink-0 w-24">
+                        <p className="text-base font-bold text-gray-900">{fmt(item.salePrice*item.qty)}</p>
                         <p className="text-xs text-gray-400">so'm</p>
                       </div>
                     </div>
