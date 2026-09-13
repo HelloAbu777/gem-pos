@@ -173,3 +173,23 @@ model Dish {
 
   @@map("dishes")
 }
+
+// Ombor (Warehouse) — kassada ko'rinmaydi
+model WarehouseItem {
+  id            String    @id @default(cuid())
+  name          String
+  barcode       String?   @unique
+  unit          String    @default("dona")
+  quantity      Float     @default(0)
+  purchasePrice Float     @default(0)
+  description   String?
+  categoryId    String?
+  supplierId    String?
+  branchId      String    @default("default-branch")
+  transferredAt DateTime?  // Mahsulotlarga o'tkazilgan vaqt
+  isTransferred Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("warehouse_items")
+}
