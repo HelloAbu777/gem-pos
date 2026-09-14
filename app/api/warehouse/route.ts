@@ -19,13 +19,13 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
 
-    if (!data.name?.trim()) {
-      return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
-    }
-
     // Agar productId kelsa — mahsulotdan omborga ko'chirish
     if (data.productId) {
       return await transferProductToWarehouse(data);
+    }
+
+    if (!data.name?.trim()) {
+      return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
     }
 
     if (data.barcode?.trim()) {
@@ -37,13 +37,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // expiryDate validatsiya
+    let expiryDate: Date | null = null;
+    if (data.expiryDate) {
+      const d = new Date(data.expiryDate);
+      if (!isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
+        expiryDate = d;
+      }
+    }
+
     const item = await prisma.warehouseItem.create({
       data: {
         name:          data.name.trim(),
         barcode:       data.barcode?.trim() || null,
-        unit:          data.unit || 'dona',
-        quantity:      Number(data.quantity) || 0,
+        unit:          data.unit          || 'dona',
+        quantity:      Number(data.quantity)    || 0,
+        minQuantity:   Number(data.minQuantity) || 10,
         purchasePrice: Number(data.purchasePrice) || 0,
+        salePrice:     Number(data.salePrice)     || 0,
+        vatType:       data.vatType    || 'NO_VAT',
+        expiryDate,
         description:   data.description?.trim() || null,
         categoryId:    data.categoryId || null,
         supplierId:    data.supplierId || null,
@@ -62,18 +75,17 @@ export async function POST(request: NextRequest) {
 // Mahsulotdan omborga ko'chirish
 async function transferProductToWarehouse(data: {
   productId: string;
-  quantity: number;      // ko'chiriladigan miqdor
+  quantity: number;
   description?: string;
 }) {
   const { productId, quantity, description } = data;
 
   if (!quantity || quantity <= 0) {
-    return NextResponse.json({ error: 'Miqdor 0 dan katta bo\'lishi kerak' }, { status: 400 });
+    return NextResponse.json({ error: "Miqdor 0 dan katta bo'lishi kerak" }, { status: 400 });
   }
 
-  // Mahsulotni topish
   const product = await prisma.product.findUnique({
-    where:   { id: productId },
+    where: { id: productId },
     include: { category: true, supplier: true },
   });
 
@@ -87,7 +99,7 @@ async function transferProductToWarehouse(data: {
     }, { status: 400 });
   }
 
-  // Barcode conflict: omborda xuddi shunday barcode bor bo'lsa, null qilamiz
+  // Barcode conflict tekshiruvi
   let barcodeToUse = product.barcode || null;
   if (barcodeToUse) {
     const existsInWarehouse = await prisma.warehouseItem.findUnique({
@@ -96,22 +108,23 @@ async function transferProductToWarehouse(data: {
     if (existsInWarehouse) barcodeToUse = null;
   }
 
-  // Tranzaksiya: mahsulot miqdorini kamayt + omborga qo'sh
   const result = await prisma.$transaction(async (tx) => {
-    // Mahsulot miqdorini kamaytirish
     const updatedProduct = await tx.product.update({
       where: { id: productId },
       data:  { quantity: { decrement: quantity } },
     });
 
-    // Omborga qo'shish
     const warehouseItem = await tx.warehouseItem.create({
       data: {
         name:          product.name,
         barcode:       barcodeToUse,
         unit:          product.unit,
         quantity:      quantity,
+        minQuantity:   product.minQuantity,
         purchasePrice: product.purchasePrice,
+        salePrice:     product.salePrice,
+        vatType:       product.vatType,
+        expiryDate:    product.expiryDate,
         description:   description?.trim() || `Mahsulotdan ko'chirildi (${new Date().toLocaleDateString('uz-UZ')})`,
         categoryId:    product.categoryId,
         supplierId:    product.supplierId,
