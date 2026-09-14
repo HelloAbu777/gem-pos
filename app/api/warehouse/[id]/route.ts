@@ -21,14 +21,26 @@ export async function PUT(
       if (ex) return NextResponse.json({ error: 'Bu barcode allaqachon mavjud' }, { status: 400 });
     }
 
+    let expiryDate: Date | null = null;
+    if (data.expiryDate) {
+      const d = new Date(data.expiryDate);
+      if (!isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
+        expiryDate = d;
+      }
+    }
+
     const item = await prisma.warehouseItem.update({
       where: { id },
       data: {
         name:          data.name.trim(),
         barcode:       data.barcode?.trim() || null,
-        unit:          data.unit || 'dona',
-        quantity:      Number(data.quantity) || 0,
+        unit:          data.unit          || 'dona',
+        quantity:      Number(data.quantity)    || 0,
+        minQuantity:   Number(data.minQuantity) || 10,
         purchasePrice: Number(data.purchasePrice) || 0,
+        salePrice:     Number(data.salePrice)     || 0,
+        vatType:       data.vatType    || 'NO_VAT',
+        expiryDate,
         description:   data.description?.trim() || null,
         categoryId:    data.categoryId || null,
         supplierId:    data.supplierId || null,
