@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Search, Pencil, Trash2, X, ArrowRightLeft,
-  Warehouse, Package, Barcode, Truck,
-  CheckCircle, AlertCircle,
+  Warehouse, CheckCircle, AlertCircle,
 } from 'lucide-react';
 
 /* ── Types ── */
@@ -14,7 +13,11 @@ interface WarehouseItem {
   barcode: string | null;
   unit: string;
   quantity: number;
+  minQuantity: number;
   purchasePrice: number;
+  salePrice: number;
+  vatType: string;
+  expiryDate: string | null;
   description: string | null;
   categoryId: string | null;
   supplierId: string | null;
@@ -28,8 +31,9 @@ interface Supplier { id: string; name: string }
 /* ── Helpers ── */
 const fmt = (n: number) => new Intl.NumberFormat('de-DE').format(Math.round(n));
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const VAT_LABELS: Record<string, string> = { NO_VAT: 'Soliqsiz', STANDARD: 'Standart', ZERO_VAT: '0%' };
 
-/* ── Field wrapper ── */
+/* ── Field wrapper (module-level, no remount) ── */
 function F({ label, req, children }: { label: string; req?: boolean; children: React.ReactNode }) {
   return (
     <div>
@@ -43,24 +47,33 @@ function F({ label, req, children }: { label: string; req?: boolean; children: R
 const inp = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none';
 
 /* ══════════════════════════════════════
-   ADD / EDIT MODAL
+   ADD / EDIT MODAL — mahsulotlar bilan bir xil forma
 ══════════════════════════════════════ */
 function ItemModal({
-  open, onClose, onSave, initial,
+  open, onClose, onSave, initial, categories, suppliers,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (data: {
-    name: string; barcode: string; unit: string; quantity: string;
-    purchasePrice: string; description: string;
+    name: string; barcode: string; unit: string; quantity: string; minQuantity: string;
+    purchasePrice: string; salePrice: string; vatType: string;
+    expiryDate: string; categoryId: string; supplierId: string; description: string;
   }) => Promise<void>;
   initial?: WarehouseItem | null;
+  categories: Category[];
+  suppliers: Supplier[];
 }) {
   const [name,          setName]          = useState('');
   const [barcode,       setBarcode]       = useState('');
   const [unit,          setUnit]          = useState('dona');
   const [quantity,      setQuantity]      = useState('0');
+  const [minQuantity,   setMinQuantity]   = useState('10');
   const [purchasePrice, setPurchasePrice] = useState('');
+  const [salePrice,     setSalePrice]     = useState('');
+  const [vatType,       setVatType]       = useState('NO_VAT');
+  const [expiryDate,    setExpiryDate]    = useState('');
+  const [categoryId,    setCategoryId]    = useState('');
+  const [supplierId,    setSupplierId]    = useState('');
   const [description,   setDescription]  = useState('');
   const [saving,        setSaving]        = useState(false);
   const [error,         setError]         = useState('');
@@ -73,20 +86,31 @@ function ItemModal({
       setBarcode(initial.barcode ?? '');
       setUnit(initial.unit);
       setQuantity(String(initial.quantity));
+      setMinQuantity(String(initial.minQuantity ?? 10));
       setPurchasePrice(String(initial.purchasePrice));
+      setSalePrice(String(initial.salePrice ?? ''));
+      setVatType(initial.vatType ?? 'NO_VAT');
+      setExpiryDate(initial.expiryDate ? initial.expiryDate.split('T')[0] : '');
+      setCategoryId(initial.categoryId ?? '');
+      setSupplierId(initial.supplierId ?? '');
       setDescription(initial.description ?? '');
     } else {
       setName(''); setBarcode(''); setUnit('dona');
-      setQuantity('0'); setPurchasePrice(''); setDescription('');
+      setQuantity('0'); setMinQuantity('10');
+      setPurchasePrice(''); setSalePrice('');
+      setVatType('NO_VAT'); setExpiryDate('');
+      setCategoryId(''); setSupplierId(''); setDescription('');
     }
   }, [open, initial]);
 
   const handleSave = async () => {
     setError('');
-    if (!name.trim()) { setError('Nom kiritilmagan'); return; }
+    if (!name.trim())  { setError('Nom kiritilmagan'); return; }
+    if (!categoryId)   { setError('Kategoriya tanlanmagan'); return; }
+    if (!supplierId)   { setError("Ta'minotchi tanlanmagan"); return; }
     setSaving(true);
     try {
-      await onSave({ name, barcode, unit, quantity, purchasePrice, description });
+      await onSave({ name, barcode, unit, quantity, minQuantity, purchasePrice, salePrice, vatType, expiryDate, categoryId, supplierId, description });
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Xatolik');
@@ -95,45 +119,121 @@ function ItemModal({
 
   if (!open) return null;
 
+  const margin = Number(salePrice) - Number(purchasePrice);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="font-bold text-gray-900">
-            {initial ? 'Tahrirlash' : "Omborga mahsulot qo'shish"}
+            {initial ? 'Omborni tahrirlash' : "Omborga mahsulot qo'shish"}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
         </div>
-        <div className="p-6 grid grid-cols-2 gap-4 overflow-y-auto max-h-[70vh]">
+
+        <div className="p-6 grid grid-cols-2 gap-4 overflow-y-auto max-h-[72vh]">
+          {/* Nomi */}
           <div className="col-span-2">
             <F label="Nomi" req>
               <input autoFocus className={inp} value={name} onChange={e=>setName(e.target.value)} placeholder="Mahsulot nomi"/>
             </F>
           </div>
+
+          {/* Shtrix kod */}
           <F label="Shtrix kod">
             <input className={`${inp} font-mono`} value={barcode} onChange={e=>setBarcode(e.target.value)} placeholder="4780068020047"/>
           </F>
+
+          {/* O'lchov birligi */}
           <F label="O'lchov birligi">
             <select className={inp} value={unit} onChange={e=>setUnit(e.target.value)}>
-              <option>dona</option><option>kg</option><option>litr</option><option>metr</option><option>quti</option><option>paket</option>
+              <option>dona</option><option>kg</option><option>litr</option>
+              <option>metr</option><option>quti</option><option>paket</option>
             </select>
           </F>
-          <F label="Miqdor" req>
-            <input type="number" className={inp} value={quantity} onChange={e=>setQuantity(e.target.value)} min="0"/>
-          </F>
+
+          {/* Kelish narxi */}
           <F label="Kelish narxi (so'm)">
             <input type="number" className={inp} value={purchasePrice} onChange={e=>setPurchasePrice(e.target.value)} placeholder="0"/>
           </F>
+
+          {/* Sotish narxi */}
+          <F label="Sotish narxi (so'm)">
+            <input type="number" className={inp} value={salePrice} onChange={e=>setSalePrice(e.target.value)} placeholder="0"/>
+          </F>
+
+          {/* Miqdor */}
+          <F label="Miqdor" req>
+            <input type="number" className={inp} value={quantity} onChange={e=>setQuantity(e.target.value)} min="0"/>
+          </F>
+
+          {/* Minimal zaxira */}
+          <F label="Minimal zaxira">
+            <input type="number" className={inp} value={minQuantity} onChange={e=>setMinQuantity(e.target.value)}/>
+          </F>
+
+          {/* Soliq */}
+          <F label="Soliq">
+            <select className={inp} value={vatType} onChange={e=>setVatType(e.target.value)}>
+              <option value="NO_VAT">Soliqsiz</option>
+              <option value="STANDARD">Standart</option>
+              <option value="ZERO_VAT">0%</option>
+            </select>
+          </F>
+
+          {/* Yaroqlilik muddati */}
+          <F label="Yaroqlilik muddati">
+            <input type="date" className={inp} value={expiryDate} onChange={e=>setExpiryDate(e.target.value)}/>
+          </F>
+
+          {/* Kategoriya */}
+          <F label="Kategoriya" req>
+            <select className={inp} value={categoryId} onChange={e=>setCategoryId(e.target.value)}>
+              <option value="">— Tanlang —</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </F>
+
+          {/* Ta'minotchi */}
+          <F label="Ta'minotchi" req>
+            <select className={inp} value={supplierId} onChange={e=>setSupplierId(e.target.value)}>
+              <option value="">— Tanlang —</option>
+              {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </F>
+
+          {/* Marja preview */}
+          {purchasePrice && salePrice && (
+            <div className="col-span-2 bg-blue-50 border border-blue-100 rounded-lg px-4 py-2.5 text-sm">
+              <span className="text-gray-500">Marja: </span>
+              <span className={`font-bold ${margin >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
+                {margin >= 0 ? '+' : ''}{fmt(margin)} so'm
+              </span>
+              {Number(purchasePrice) > 0 && (
+                <span className="text-blue-500 ml-2">
+                  ({(margin / Number(purchasePrice) * 100).toFixed(1)}%)
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Izoh */}
           <div className="col-span-2">
-            <F label="Izoh">
+            <F label="Izoh (ixtiyoriy)">
               <textarea className={`${inp} resize-none`} rows={2} value={description} onChange={e=>setDescription(e.target.value)} placeholder="Qo'shimcha ma'lumot..."/>
             </F>
           </div>
+
           {error && <p className="col-span-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
         </div>
+
         <div className="flex gap-3 px-6 pb-5">
-          <button onClick={onClose} disabled={saving} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">Bekor qilish</button>
-          <button onClick={handleSave} disabled={saving} className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
+          <button onClick={onClose} disabled={saving}
+            className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+            Bekor qilish
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
             {saving ? 'Saqlanmoqda...' : 'Saqlash'}
           </button>
         </div>
@@ -298,8 +398,9 @@ export default function WarehousePage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleSave = async (data: {
-    name: string; barcode: string; unit: string; quantity: string;
-    purchasePrice: string; description: string;
+    name: string; barcode: string; unit: string; quantity: string; minQuantity: string;
+    purchasePrice: string; salePrice: string; vatType: string;
+    expiryDate: string; categoryId: string; supplierId: string; description: string;
   }, id?: string) => {
     const url    = id ? `/api/warehouse/${id}` : '/api/warehouse';
     const method = id ? 'PUT' : 'POST';
@@ -509,6 +610,8 @@ export default function WarehousePage() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSave={data => handleSave(data)}
+        categories={categories}
+        suppliers={suppliers}
       />
 
       {/* Edit Modal */}
@@ -517,6 +620,8 @@ export default function WarehousePage() {
         onClose={() => setEditTarget(null)}
         onSave={data => handleSave(data, editTarget!.id)}
         initial={editTarget}
+        categories={categories}
+        suppliers={suppliers}
       />
 
       {/* Transfer Modal */}
