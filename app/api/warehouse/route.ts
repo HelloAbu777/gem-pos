@@ -23,6 +23,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
     }
 
+    // Agar productId kelsa — mahsulotdan omborga ko'chirish
+    if (data.productId) {
+      return await transferProductToWarehouse(data);
+    }
+
     if (data.barcode?.trim()) {
       const exists = await prisma.warehouseItem.findUnique({
         where: { barcode: data.barcode.trim() },
@@ -52,4 +57,74 @@ export async function POST(request: NextRequest) {
     const msg = error instanceof Error ? error.message : 'Server xatosi';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+// Mahsulotdan omborga ko'chirish
+async function transferProductToWarehouse(data: {
+  productId: string;
+  quantity: number;      // ko'chiriladigan miqdor
+  description?: string;
+}) {
+  const { productId, quantity, description } = data;
+
+  if (!quantity || quantity <= 0) {
+    return NextResponse.json({ error: 'Miqdor 0 dan katta bo\'lishi kerak' }, { status: 400 });
+  }
+
+  // Mahsulotni topish
+  const product = await prisma.product.findUnique({
+    where:   { id: productId },
+    include: { category: true, supplier: true },
+  });
+
+  if (!product) {
+    return NextResponse.json({ error: 'Mahsulot topilmadi' }, { status: 404 });
+  }
+
+  if (product.quantity < quantity) {
+    return NextResponse.json({
+      error: `Yetarli zaxira yo'q. Mavjud: ${product.quantity} ${product.unit}`,
+    }, { status: 400 });
+  }
+
+  // Barcode conflict: omborda xuddi shunday barcode bor bo'lsa, null qilamiz
+  let barcodeToUse = product.barcode || null;
+  if (barcodeToUse) {
+    const existsInWarehouse = await prisma.warehouseItem.findUnique({
+      where: { barcode: barcodeToUse },
+    });
+    if (existsInWarehouse) barcodeToUse = null;
+  }
+
+  // Tranzaksiya: mahsulot miqdorini kamayt + omborga qo'sh
+  const result = await prisma.$transaction(async (tx) => {
+    // Mahsulot miqdorini kamaytirish
+    const updatedProduct = await tx.product.update({
+      where: { id: productId },
+      data:  { quantity: { decrement: quantity } },
+    });
+
+    // Omborga qo'shish
+    const warehouseItem = await tx.warehouseItem.create({
+      data: {
+        name:          product.name,
+        barcode:       barcodeToUse,
+        unit:          product.unit,
+        quantity:      quantity,
+        purchasePrice: product.purchasePrice,
+        description:   description?.trim() || `Mahsulotdan ko'chirildi (${new Date().toLocaleDateString('uz-UZ')})`,
+        categoryId:    product.categoryId,
+        supplierId:    product.supplierId,
+        branchId:      'default-branch',
+      },
+    });
+
+    return { updatedProduct, warehouseItem };
+  });
+
+  return NextResponse.json({
+    success: true,
+    warehouseItem: result.warehouseItem,
+    remainingQuantity: result.updatedProduct.quantity,
+  }, { status: 201 });
 }
