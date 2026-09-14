@@ -73,8 +73,13 @@ export async function GET(request: NextRequest) {
     await prisma.$executeRawUnsafe(`INSERT INTO "users" ("id","name","login","password","role","branchId","updatedAt") VALUES ('default-cashier','Admin','admin','${hash}','ADMIN','default-branch',NOW()) ON CONFLICT ("login") DO NOTHING;`);
     steps.push('seed_admin');
 
-    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "warehouse_items" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "barcode" TEXT, "unit" TEXT NOT NULL DEFAULT 'dona', "quantity" DOUBLE PRECISION NOT NULL DEFAULT 0, "purchasePrice" DOUBLE PRECISION NOT NULL DEFAULT 0, "description" TEXT, "categoryId" TEXT, "supplierId" TEXT, "branchId" TEXT NOT NULL DEFAULT 'default-branch', "transferredAt" TIMESTAMP(3), "isTransferred" BOOLEAN NOT NULL DEFAULT false, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "warehouse_items_pkey" PRIMARY KEY ("id"));`);
+    await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "warehouse_items" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "barcode" TEXT, "unit" TEXT NOT NULL DEFAULT 'dona', "quantity" DOUBLE PRECISION NOT NULL DEFAULT 0, "minQuantity" DOUBLE PRECISION NOT NULL DEFAULT 10, "purchasePrice" DOUBLE PRECISION NOT NULL DEFAULT 0, "salePrice" DOUBLE PRECISION NOT NULL DEFAULT 0, "vatType" TEXT NOT NULL DEFAULT 'NO_VAT', "expiryDate" TIMESTAMP(3), "description" TEXT, "categoryId" TEXT, "supplierId" TEXT, "branchId" TEXT NOT NULL DEFAULT 'default-branch', "transferredAt" TIMESTAMP(3), "isTransferred" BOOLEAN NOT NULL DEFAULT false, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "warehouse_items_pkey" PRIMARY KEY ("id"));`);
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "warehouse_items_barcode_key" ON "warehouse_items"("barcode");`);
+    // Mavjud jadvalga yangi columnlar qo'shish (ALTER TABLE IF NOT EXISTS)
+    await prisma.$executeRawUnsafe(`ALTER TABLE "warehouse_items" ADD COLUMN IF NOT EXISTS "minQuantity" DOUBLE PRECISION NOT NULL DEFAULT 10;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "warehouse_items" ADD COLUMN IF NOT EXISTS "salePrice" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "warehouse_items" ADD COLUMN IF NOT EXISTS "vatType" TEXT NOT NULL DEFAULT 'NO_VAT';`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "warehouse_items" ADD COLUMN IF NOT EXISTS "expiryDate" TIMESTAMP(3);`);
     steps.push('warehouse_items');
 
     // Prisma migrations table
