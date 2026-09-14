@@ -634,10 +634,6 @@ export default function PosPage() {
                       <p className="text-xs text-center mt-1 text-orange-500 font-medium">🍽 taom</p>
                     </button>
                   );
-                })}lassName="text-sm font-bold text-gray-900 text-center">{fmt(d.price)}<span className="text-xs font-normal text-gray-400 ml-0.5">so'm</span></p>
-                      <p className="text-xs text-center mt-0.5 text-orange-500 font-medium">🍽 taom</p>
-                    </button>
-                  );
                 })}
 
               </div>
