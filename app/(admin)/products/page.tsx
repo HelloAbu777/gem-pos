@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
   Plus, Search, X, Package, Tag, Truck, Calendar,
-  AlertTriangle, Barcode, Pencil, Trash2, Printer, Star,
+  AlertTriangle, Barcode, Pencil, Trash2, Printer, Star, Warehouse,
 } from 'lucide-react';
 import BarcodePrintModal from '@/components/ui/BarcodePrintModal';
 
@@ -37,6 +37,155 @@ function F({ label, req, children }: { label: string; req?: boolean; children: R
         {label}{req && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+/* ── Move to Warehouse Modal ── */
+function MoveToWarehouseModal({ product, onClose, onMove }: {
+  product: Product;
+  onClose: () => void;
+  onMove: (quantity: number, description: string) => Promise<void>;
+}) {
+  const maxQty = product.quantity;
+  const [quantity,    setQuantity]    = useState(String(maxQty));
+  const [description, setDescription] = useState('');
+  const [saving,      setSaving]      = useState(false);
+  const [error,       setError]       = useState('');
+
+  const handleMove = async () => {
+    setError('');
+    const qty = Number(quantity);
+    if (!qty || qty <= 0)    { setError('Miqdor 0 dan katta bo\'lishi kerak'); return; }
+    if (qty > maxQty)        { setError(`Maksimal miqdor: ${maxQty} ${product.unit}`); return; }
+    setSaving(true);
+    try {
+      await onMove(qty, description);
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Xatolik');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        {/* Header */}
+        <div className="bg-gray-900 px-6 py-5 flex items-start justify-between">
+          <div>
+            <h2 className="text-white font-bold text-lg flex items-center gap-2">
+              <Warehouse className="w-5 h-5 text-gray-300"/>
+              Omborga ko'chirish
+            </h2>
+            <p className="text-gray-400 text-sm mt-0.5 truncate max-w-[280px]">{product.name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+            <X className="w-5 h-5"/>
+          </button>
+        </div>
+
+        {/* Info */}
+        <div className="grid grid-cols-3 gap-0 border-b border-gray-100 bg-gray-50">
+          <div className="px-4 py-3 text-center border-r border-gray-100">
+            <p className="text-xs text-gray-400 mb-0.5">Mavjud zaxira</p>
+            <p className="text-lg font-bold text-gray-900">{product.quantity}</p>
+            <p className="text-xs text-gray-400">{product.unit}</p>
+          </div>
+          <div className="px-4 py-3 text-center border-r border-gray-100">
+            <p className="text-xs text-gray-400 mb-0.5">Kelish narxi</p>
+            <p className="text-sm font-bold text-gray-900">{fmt(product.purchasePrice)}</p>
+            <p className="text-xs text-gray-400">so'm</p>
+          </div>
+          <div className="px-4 py-3 text-center">
+            <p className="text-xs text-gray-400 mb-0.5">Kategoriya</p>
+            <p className="text-xs font-semibold text-gray-700 truncate">{product.category.name}</p>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Miqdor input */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">
+              Ko'chiriladigan miqdor <span className="text-red-500">*</span>
+              <span className="text-gray-400 font-normal ml-1">(max: {maxQty} {product.unit})</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                autoFocus
+                className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none font-bold text-lg"
+                value={quantity}
+                onChange={e => setQuantity(e.target.value)}
+                min="1"
+                max={maxQty}
+              />
+              <span className="text-gray-500 font-medium text-sm flex-shrink-0">{product.unit}</span>
+            </div>
+            {/* Tez tanlash */}
+            <div className="flex gap-2 mt-2">
+              {[
+                { label: '25%', val: Math.floor(maxQty * 0.25) },
+                { label: '50%', val: Math.floor(maxQty * 0.5) },
+                { label: '75%', val: Math.floor(maxQty * 0.75) },
+                { label: 'Barchasi', val: maxQty },
+              ].filter(b => b.val > 0).map(btn => (
+                <button
+                  key={btn.label}
+                  onClick={() => setQuantity(String(btn.val))}
+                  className={`px-3 py-1 text-xs rounded-lg border transition-colors ${
+                    Number(quantity) === btn.val
+                      ? 'bg-gray-900 text-white border-gray-900'
+                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}>
+                  {btn.label} ({btn.val})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Izoh */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Izoh (ixtiyoriy)</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Masalan: Qaytarildi, eskirdi..."
+            />
+          </div>
+
+          {/* Ko'chirish natijasi preview */}
+          {Number(quantity) > 0 && Number(quantity) <= maxQty && (
+            <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3 text-sm">
+              <div className="flex justify-between text-gray-600">
+                <span>Ko'chiriladi:</span>
+                <span className="font-bold text-gray-900">{Number(quantity)} {product.unit}</span>
+              </div>
+              <div className="flex justify-between text-gray-600 mt-1">
+                <span>Qoladi:</span>
+                <span className={`font-bold ${maxQty - Number(quantity) <= product.minQuantity ? 'text-orange-600' : 'text-gray-900'}`}>
+                  {maxQty - Number(quantity)} {product.unit}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+        </div>
+
+        <div className="flex gap-3 px-6 pb-5">
+          <button onClick={onClose} disabled={saving}
+            className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+            Bekor qilish
+          </button>
+          <button onClick={handleMove} disabled={saving || maxQty === 0}
+            className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2">
+            <Warehouse className="w-4 h-4"/>
+            {saving ? 'Ko\'chirilmoqda...' : 'Omborga ko\'chirish'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -305,6 +454,7 @@ export default function ProductsPage() {
   const [deleteId,    setDeleteId]    = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [printTarget, setPrintTarget] = useState<Product | null>(null);
+  const [warehouseTarget, setWarehouseTarget] = useState<Product | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -352,6 +502,16 @@ export default function ProductsPage() {
       });
       await fetchAll();
     } catch (e) { console.error(e); }
+  }, [fetchAll]);
+
+  const handleMoveToWarehouse = useCallback(async (product: Product, quantity: number, description: string) => {
+    const res = await fetch('/api/warehouse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: product.id, name: product.name, quantity, description }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Xatolik'); }
+    await fetchAll();
   }, [fetchAll]);
 
   const filtered = products.filter(p => {
@@ -482,6 +642,12 @@ export default function ProductsPage() {
                             className={`p-1.5 rounded-lg transition-colors ${p.isPinned ? 'text-yellow-500 bg-yellow-50 hover:bg-yellow-100' : 'text-gray-400 hover:text-yellow-500 hover:bg-yellow-50'}`}>
                             <Star className={`w-4 h-4 ${p.isPinned ? 'fill-yellow-400' : ''}`} />
                           </button>
+                          <button
+                            onClick={() => setWarehouseTarget(p)}
+                            title="Omborga ko'chirish"
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                            <Warehouse className="w-4 h-4" />
+                          </button>
                           <button onClick={() => setEditTarget(p)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                             <Pencil className="w-4 h-4" />
                           </button>
@@ -528,6 +694,15 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Warehouse Modal */}
+      {warehouseTarget && (
+        <MoveToWarehouseModal
+          product={warehouseTarget}
+          onClose={() => setWarehouseTarget(null)}
+          onMove={(qty, desc) => handleMoveToWarehouse(warehouseTarget, qty, desc)}
+        />
       )}
 
       {/* Barcode Print Modal */}
