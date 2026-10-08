@@ -1,5 +1,5 @@
 {
-  "buildCommand": "prisma migrate deploy && next build --no-lint",
+  "buildCommand": "next build --no-lint",
   "outputDirectory": ".next",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
