@@ -8,6 +8,7 @@ interface Dish {
   id: string;
   name: string;
   price: number;
+  costPrice: number;
   barcode: string | null;
   isActive: boolean;
   createdAt: string;
@@ -21,33 +22,49 @@ function DishModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (data: { name: string; price: number; barcode: string; isActive: boolean }) => Promise<void>;
+  onSave: (data: { name: string; price: number; costPrice: number; barcode: string; isActive: boolean }) => Promise<void>;
   initial?: Dish | null;
 }) {
-  const [name,     setName]     = useState('');
-  const [price,    setPrice]    = useState('');
-  const [barcode,  setBarcode]  = useState('');
-  const [isActive, setIsActive] = useState(true);
-  const [saving,   setSaving]   = useState(false);
-  const [error,    setError]    = useState('');
+  const [name,      setName]      = useState('');
+  const [price,     setPrice]     = useState('');
+  const [costPrice, setCostPrice] = useState('');
+  const [barcode,   setBarcode]   = useState('');
+  const [isActive,  setIsActive]  = useState(true);
+  const [saving,    setSaving]    = useState(false);
+  const [error,     setError]     = useState('');
 
   useEffect(() => {
     if (open) {
       setName(initial?.name ?? '');
       setPrice(initial?.price?.toString() ?? '');
+      setCostPrice(initial?.costPrice?.toString() ?? '');
       setBarcode(initial?.barcode ?? '');
       setIsActive(initial?.isActive ?? true);
       setError('');
     }
   }, [open, initial]);
 
+  // Marja foizi hisobi
+  const margin = (() => {
+    const p = Number(price);
+    const c = Number(costPrice);
+    if (!c || !p || p <= 0) return null;
+    return (((p - c) / c) * 100).toFixed(1);
+  })();
+
   const handleSave = async () => {
     setError('');
-    if (!name.trim())           { setError('Taom nomi kiritilmagan'); return; }
-    if (!price || Number(price) <= 0) { setError('Narx noto\'g\'ri'); return; }
+    if (!name.trim())                { setError('Taom nomi kiritilmagan'); return; }
+    if (!price || Number(price) <= 0) { setError("Narx noto'g'ri"); return; }
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), price: Number(price), barcode: barcode.trim(), isActive });
+      await onSave({
+        name: name.trim(),
+        price: Number(price),
+        costPrice: Number(costPrice) || 0,
+        barcode: barcode.trim(),
+        isActive,
+      });
       onClose();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Xatolik yuz berdi');
@@ -87,21 +104,52 @@ function DishModal({
             />
           </div>
 
-          {/* Narx */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Narx (so'm) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              value={price}
-              onChange={e => setPrice(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSave()}
-              placeholder="Masalan: 25000"
-              min={1}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none"
-            />
+          {/* Tan narxi va Sotuv narxi — yon-yon */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Tan narxi */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tan narxi (so'm)
+              </label>
+              <input
+                type="number"
+                value={costPrice}
+                onChange={e => setCostPrice(e.target.value)}
+                placeholder="Masalan: 15000"
+                min={0}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+              />
+            </div>
+
+            {/* Sotuv narxi */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sotuv narxi (so'm) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSave()}
+                placeholder="Masalan: 25000"
+                min={1}
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none"
+              />
+            </div>
           </div>
+
+          {/* Marja ko'rsatkichi */}
+          {margin !== null && (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+              Number(margin) >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+            }`}>
+              <span className="font-medium">Marja:</span>
+              <span className="font-bold">{margin}%</span>
+              <span className="text-xs ml-auto">
+                Foyda: {fmt(Number(price) - Number(costPrice))} so'm
+              </span>
+            </div>
+          )}
 
           {/* Barcode */}
           <div>
@@ -118,7 +166,7 @@ function DishModal({
             />
           </div>
 
-          {/* Aktiv */}
+          {/* Aktiv — faqat edit rejimida */}
           {initial && (
             <div className="flex items-center justify-between py-2">
               <span className="text-sm font-medium text-gray-700">Aktiv holat</span>
@@ -162,13 +210,13 @@ function DishModal({
 
 /* ── Main Page ── */
 export default function DishesPage() {
-  const [dishes,     setDishes]     = useState<Dish[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
-  const [modalOpen,  setModalOpen]  = useState(false);
-  const [editTarget, setEditTarget] = useState<Dish | null>(null);
-  const [deleteId,   setDeleteId]   = useState<string | null>(null);
-  const [printTarget,setPrintTarget]= useState<Dish | null>(null);
+  const [dishes,      setDishes]      = useState<Dish[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [search,      setSearch]      = useState('');
+  const [modalOpen,   setModalOpen]   = useState(false);
+  const [editTarget,  setEditTarget]  = useState<Dish | null>(null);
+  const [deleteId,    setDeleteId]    = useState<string | null>(null);
+  const [printTarget, setPrintTarget] = useState<Dish | null>(null);
 
   const fetchDishes = useCallback(async () => {
     try {
@@ -181,7 +229,7 @@ export default function DishesPage() {
 
   useEffect(() => { fetchDishes(); }, [fetchDishes]);
 
-  const handleSave = async (data: { name: string; price: number; barcode: string; isActive: boolean }) => {
+  const handleSave = async (data: { name: string; price: number; costPrice: number; barcode: string; isActive: boolean }) => {
     const url    = editTarget ? `/api/dishes/${editTarget.id}` : '/api/dishes';
     const method = editTarget ? 'PUT' : 'POST';
     const res    = await fetch(url, {
@@ -268,7 +316,7 @@ export default function DishesPage() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
             <UtensilsCrossed className="w-12 h-12 mb-3 text-gray-200" />
-            <p className="font-medium">{search ? 'Taom topilmadi' : 'Hali taom yo\'q'}</p>
+            <p className="font-medium">{search ? 'Taom topilmadi' : "Hali taom yo'q"}</p>
             {!search && <p className="text-sm mt-1">Yuqoridagi tugmani bosib qo'shing</p>}
           </div>
         ) : (
@@ -277,84 +325,139 @@ export default function DishesPage() {
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Taom nomi</th>
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Shtrix kod</th>
-                <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Narx</th>
+                <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Tan narxi</th>
+                <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Sotuv narxi</th>
+                <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Marja</th>
                 <th className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider px-5 py-3">Holat</th>
                 <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map(dish => (
-                <tr key={dish.id} className={`hover:bg-gray-50 transition-colors ${!dish.isActive ? 'opacity-50' : ''}`}>
-                  {/* Nom */}
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-                        <UtensilsCrossed className="w-4 h-4 text-orange-500" />
-                      </div>
-                      <span className="font-medium text-gray-900">{dish.name}</span>
-                    </div>
-                  </td>
+              {filtered.map(dish => {
+                const marginPct = dish.costPrice > 0
+                  ? (((dish.price - dish.costPrice) / dish.costPrice) * 100).toFixed(1)
+                  : null;
 
-                  {/* Barcode */}
-                  <td className="px-5 py-4">
-                    {dish.barcode ? (
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md">
-                          {dish.barcode}
+                return (
+                  <tr key={dish.id} className={`hover:bg-gray-50 transition-colors ${!dish.isActive ? 'opacity-50' : ''}`}>
+                    {/* Nom */}
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
+                          <UtensilsCrossed className="w-4 h-4 text-orange-500" />
+                        </div>
+                        <span className="font-medium text-gray-900">{dish.name}</span>
+                      </div>
+                    </td>
+
+                    {/* Barcode */}
+                    <td className="px-5 py-4">
+                      {dish.barcode ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md">
+                            {dish.barcode}
+                          </span>
+                          <button
+                            onClick={() => setPrintTarget(dish)}
+                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                            title="Chop etish"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-sm">—</span>
+                      )}
+                    </td>
+
+                    {/* Tan narxi */}
+                    <td className="px-5 py-4 text-right">
+                      {dish.costPrice > 0 ? (
+                        <>
+                          <span className="font-medium text-gray-700">{fmt(dish.costPrice)}</span>
+                          <span className="text-xs text-gray-400 ml-1">so'm</span>
+                        </>
+                      ) : (
+                        <span className="text-gray-400 text-sm">—</span>
+                      )}
+                    </td>
+
+                    {/* Sotuv narxi */}
+                    <td className="px-5 py-4 text-right">
+                      <span className="font-bold text-gray-900">{fmt(dish.price)}</span>
+                      <span className="text-xs text-gray-400 ml-1">so'm</span>
+                    </td>
+
+                    {/* Marja */}
+                    <td className="px-5 py-4 text-right">
+                      {marginPct !== null ? (
+                        <span className={`text-sm font-semibold ${Number(marginPct) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {marginPct}%
                         </span>
+                      ) : (
+                        <span className="text-gray-400 text-sm">—</span>
+                      )}
+                    </td>
+
+                    {/* Holat */}
+                    <td className="px-5 py-4 text-center">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        dish.isActive
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {dish.isActive ? 'Aktiv' : 'Nofaol'}
+                      </span>
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2 justify-end">
                         <button
-                          onClick={() => setPrintTarget(dish)}
-                          className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                          title="Chop etish"
+                          onClick={() => { setEditTarget(dish); setModalOpen(true); }}
+                          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                         >
-                          <Printer className="w-3.5 h-3.5" />
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(dish.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    ) : (
-                      <span className="text-gray-400 text-sm">—</span>
-                    )}
-                  </td>
-
-                  {/* Narx */}
-                  <td className="px-5 py-4 text-right">
-                    <span className="font-bold text-gray-900">{fmt(dish.price)}</span>
-                    <span className="text-xs text-gray-400 ml-1">so'm</span>
-                  </td>
-
-                  {/* Holat */}
-                  <td className="px-5 py-4 text-center">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                      dish.isActive
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {dish.isActive ? 'Aktiv' : 'Nofaol'}
-                    </span>
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-2 justify-end">
-                      <button
-                        onClick={() => { setEditTarget(dish); setModalOpen(true); }}
-                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(dish.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Delete confirm */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Taomni o'chirish</h3>
+            <p className="text-sm text-gray-500 mb-6">Bu taom butunlay o'chiriladi. Davom etasizmi?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteId(null)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={() => handleDelete(deleteId)}
+                className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600"
+              >
+                O'chirish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       <DishModal

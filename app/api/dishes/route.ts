@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 // POST - yangi taom qo'shish
 export async function POST(request: NextRequest) {
   try {
-    const { name, price, barcode } = await request.json();
+    const { name, price, costPrice, barcode } = await request.json();
 
     if (!name?.trim())        return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
     if (!price || price <= 0) return NextResponse.json({ error: 'Narx noto\'g\'ri' }, { status: 400 });
@@ -34,11 +34,12 @@ export async function POST(request: NextRequest) {
 
     const dish = await prisma.dish.create({
       data: {
-        name:     name.trim(),
-        price:    Number(price),
-        barcode:  barcode?.trim() || null,
-        isActive: true,
-        branchId: 'default-branch',
+        name:      name.trim(),
+        price:     Number(price),
+        costPrice: Number(costPrice) || 0,
+        barcode:   barcode?.trim() || null,
+        isActive:  true,
+        branchId:  'default-branch',
       },
     });
     return NextResponse.json(dish, { status: 201 });

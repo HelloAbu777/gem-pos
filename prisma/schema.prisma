@@ -1,14 +1,13 @@
 // Prisma Schema for GEM POS System
-// Database: PostgreSQL
+// Database: SQLite (local dev)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // Foydalanuvchilar (Admin va Kassir)
@@ -17,7 +16,7 @@ model User {
   name      String
   login     String   @unique
   password  String   // bcrypt hash
-  role      Role     @default(CASHIER)
+  role      String   @default("CASHIER") // ADMIN | CASHIER
   branchId  String
   branch    Branch   @relation(fields: [branchId], references: [id])
   sales     Sale[]
@@ -25,11 +24,6 @@ model User {
   updatedAt DateTime @updatedAt
 
   @@map("users")
-}
-
-enum Role {
-  ADMIN
-  CASHIER
 }
 
 // Filiallar (Do'konlar)
@@ -81,7 +75,7 @@ model Product {
   purchasePrice  Float       // Sotib olish narxi
   salePrice      Float       // Sotish narxi
   margin         Float       // Marja (avtomatik hisoblanadi)
-  vatType        VATType     @default(NO_VAT)
+  vatType        String      @default("NO_VAT") // STANDARD | NO_VAT | ZERO_VAT
   expiryDate     DateTime?   // Yaroqlilik muddati
   isPinned       Boolean     @default(false) // Kassa boshida ko'rsatish
   categoryId     String
@@ -97,20 +91,14 @@ model Product {
   @@map("products")
 }
 
-enum VATType {
-  STANDARD    // Standart soliq
-  NO_VAT      // Soliqsiz
-  ZERO_VAT    // Soliq 0%
-}
-
 // Sotuvlar
 model Sale {
   id              String        @id @default(cuid())
   totalAmount     Float
-  paymentType     PaymentType
+  paymentType     String        // CASH | CARD | MIXED
   cashAmount      Float?
   cardAmount      Float?
-  saleType        SaleType      @default(RETAIL)
+  saleType        String        @default("RETAIL") // RETAIL | LEGAL_ENTITY
   cashierId       String
   cashier         User          @relation(fields: [cashierId], references: [id])
   branchId        String
@@ -121,17 +109,6 @@ model Sale {
   createdAt       DateTime      @default(now())
 
   @@map("sales")
-}
-
-enum SaleType {
-  RETAIL       // Oddiy savdo
-  LEGAL_ENTITY // Yuridik shaxsga savdo
-}
-
-enum PaymentType {
-  CASH   // Naqd
-  CARD   // Karta
-  MIXED  // Aralash
 }
 
 // Sotuv tafsilotlari
@@ -165,6 +142,7 @@ model Dish {
   id        String   @id @default(cuid())
   name      String
   price     Float
+  costPrice Float    @default(0) // Tan narxi (tayyorlash xarajati)
   barcode   String?  @unique
   isActive  Boolean  @default(true)
   branchId  String   @default("default-branch")

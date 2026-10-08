@@ -8,7 +8,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await context.params;
-    const { name, price, barcode, isActive } = await request.json();
+    const { name, price, costPrice, barcode, isActive } = await request.json();
 
     if (!name?.trim())        return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
     if (!price || price <= 0) return NextResponse.json({ error: 'Narx noto\'g\'ri' }, { status: 400 });
@@ -24,10 +24,11 @@ export async function PUT(
     const dish = await prisma.dish.update({
       where: { id },
       data: {
-        name:     name.trim(),
-        price:    Number(price),
-        barcode:  barcode?.trim() || null,
-        isActive: isActive ?? true,
+        name:      name.trim(),
+        price:     Number(price),
+        costPrice: Number(costPrice) || 0,
+        barcode:   barcode?.trim() || null,
+        isActive:  isActive ?? true,
       },
     });
     return NextResponse.json(dish);
