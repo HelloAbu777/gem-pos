@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
 
     await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "dishes" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "price" DOUBLE PRECISION NOT NULL, "barcode" TEXT, "isActive" BOOLEAN NOT NULL DEFAULT true, "branchId" TEXT NOT NULL DEFAULT 'default-branch', "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "dishes_pkey" PRIMARY KEY ("id"));`);
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "dishes_barcode_key" ON "dishes"("barcode");`);
+    // costPrice ustunini qo'shish (mavjud jadvalga)
+    await prisma.$executeRawUnsafe(`ALTER TABLE "dishes" ADD COLUMN IF NOT EXISTS "costPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
     steps.push('dishes');
 
     await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "sales" ("id" TEXT NOT NULL, "totalAmount" DOUBLE PRECISION NOT NULL, "paymentType" "PaymentType" NOT NULL, "cashAmount" DOUBLE PRECISION, "cardAmount" DOUBLE PRECISION, "saleType" "SaleType" NOT NULL DEFAULT 'RETAIL', "cashierId" TEXT NOT NULL, "branchId" TEXT NOT NULL, "legalEntityId" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "sales_pkey" PRIMARY KEY ("id"));`);

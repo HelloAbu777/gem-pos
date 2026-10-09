@@ -9,7 +9,7 @@ export interface SessionData {
   userId: string;
   login: string;
   name: string;
-  role: string;
+  role: 'ADMIN' | 'CASHIER';
   branchId: string;
   [key: string]: unknown;
 }
