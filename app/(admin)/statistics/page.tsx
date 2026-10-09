@@ -240,7 +240,7 @@ function MonthlyOverlay({ onClose }: { onClose: () => void }) {
   })();
 
   return (
-    <div className="fixed inset-0 z-50 bg-white flex flex-col overflow-hidden">
+    <div className="absolute inset-0 z-50 bg-white flex flex-col overflow-hidden">
       {/* ── TOP BAR ── */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-white flex-shrink-0">
         <div className="flex items-center gap-3">
