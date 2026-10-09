@@ -144,6 +144,7 @@ model SaleItem {
   itemName    String   // mahsulot yoki taom nomi (snapshot)
   quantity    Float
   priceAtSale Float
+  costPrice   Float    @default(0) // Tan narxi snapshot (sotuv paytidagi)
 
   @@map("sale_items")
 }

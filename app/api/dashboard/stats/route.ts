@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
           itemName:    true,
           quantity:    true,
           priceAtSale: true,
+          costPrice:   true, // snapshot — mahsulot ham, taom ham
           product: { select: { name: true, purchasePrice: true } },
         },
       },
@@ -71,12 +72,18 @@ export async function GET(request: NextRequest) {
     }, 0);
 
     // ── Sof foyda (faqat retail) ──────────────────────────────────
+    // Ustuvorlik: item.costPrice (snapshot) → product.purchasePrice (joriy) → 0
     let totalCost = 0;
     for (const sale of retailSales) {
       for (const item of sale.saleItems) {
-        if (item.product?.purchasePrice) {
+        if (item.costPrice > 0) {
+          // Yangi sotuvlar: costPrice snapshot saqlangan
+          totalCost += item.costPrice * item.quantity;
+        } else if (item.product?.purchasePrice) {
+          // Eski sotuvlar: joriy purchasePrice fallback
           totalCost += item.product.purchasePrice * item.quantity;
         }
+        // Taomlar (eski, costPrice=0, product=null): 0 deb hisoblanadi
       }
     }
     const netProfit = totalRevenue - totalCost;

@@ -18,7 +18,7 @@ interface Product {
 }
 interface Dish {
   id: string; name: string; price: number;
-  barcode?: string | null; isActive: boolean;
+  barcode?: string | null; isActive: boolean; costPrice: number;
 }
 interface LegalEntity { id: string; name: string; phone: string; }
 interface Category { id: string; name: string }
@@ -387,7 +387,7 @@ export default function PosPage() {
     setCart(prev => {
       const ex = prev.find(i=>i.cartKey===key);
       if (ex) return prev.map(i=>i.cartKey===key?{...i,qty:i.qty+1}:i);
-      return [...prev, {cartKey:key,type:'dish',refId:d.id,name:d.name,salePrice:d.price,purchasePrice:0,stockQty:Infinity,unit:'porsiya',qty:1}];
+      return [...prev, {cartKey:key,type:'dish',refId:d.id,name:d.name,salePrice:d.price,purchasePrice:d.costPrice ?? 0,stockQty:Infinity,unit:'porsiya',qty:1}];
     });
   }, []);
 
@@ -484,9 +484,12 @@ export default function PosPage() {
     setProcessing(true);
     try {
       const items = cart.map(i => ({
-        productId:   i.type==='product' ? i.refId : null,
-        dishId:      i.type==='dish'    ? i.refId : null,
-        itemName:    i.name, quantity: i.qty, priceAtSale: i.salePrice,
+        productId:     i.type==='product' ? i.refId : null,
+        dishId:        i.type==='dish'    ? i.refId : null,
+        itemName:      i.name,
+        quantity:      i.qty,
+        priceAtSale:   i.salePrice,
+        purchasePrice: i.purchasePrice,  // tan narxi snapshot
       }));
       const res  = await fetch('/api/sales', {
         method:'POST', headers:{'Content-Type':'application/json'},
