@@ -84,6 +84,11 @@ export async function GET(request: NextRequest) {
     await prisma.$executeRawUnsafe(`ALTER TABLE "warehouse_items" ADD COLUMN IF NOT EXISTS "expiryDate" TIMESTAMP(3);`);
     steps.push('warehouse_items');
 
+    // Yangi ustunlar: sale_items.costPrice, dishes.costPrice
+    await prisma.$executeRawUnsafe(`ALTER TABLE "sale_items" ADD COLUMN IF NOT EXISTS "costPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "dishes" ADD COLUMN IF NOT EXISTS "costPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+    steps.push('new_columns_costprice');
+
     // Prisma migrations table
     await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "_prisma_migrations" ("id" VARCHAR(36) NOT NULL, "checksum" VARCHAR(64) NOT NULL, "finished_at" TIMESTAMPTZ, "migration_name" VARCHAR(255) NOT NULL, "logs" TEXT, "rolled_back_at" TIMESTAMPTZ, "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(), "applied_steps_count" INTEGER NOT NULL DEFAULT 0, CONSTRAINT "_prisma_migrations_pkey" PRIMARY KEY ("id"));`);
     steps.push('prisma_migrations_table');
