@@ -134,7 +134,6 @@ export async function POST(request: NextRequest) {
               itemName:    item.itemName,
               quantity:    item.quantity,
               priceAtSale: item.priceAtSale,
-              costPrice:   item.purchasePrice ?? 0,
             })),
           },
         },
