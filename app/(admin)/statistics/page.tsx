@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   TrendingUp, TrendingDown, ShoppingCart, Banknote,
   CreditCard, Building2, Package, BarChart2, Users,
-  Calendar, ArrowUpRight, ArrowDownRight,
+  Calendar, ArrowUpRight, ArrowDownRight, ChevronLeft,
+  ChevronRight, X, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 /* ── Types ── */
@@ -17,15 +18,46 @@ interface Stats {
 interface TopProduct { name: string; quantity: number; revenue: number }
 interface DailySale   { date: string; revenue: number }
 
+interface SaleItem {
+  id: string; itemName: string; quantity: number; priceAtSale: number;
+  product: { name: string } | null;
+}
+interface SaleDetail {
+  id: string; totalAmount: number; paymentType: string;
+  cashAmount: number | null; cardAmount: number | null;
+  saleType: string; createdAt: string;
+  cashier: { id: string; name: string };
+  legalEntity: { id: string; name: string; phone: string } | null;
+  saleItems: SaleItem[];
+}
+interface DayData {
+  date: string; day: number;
+  total: number; cash: number; card: number;
+  salesCount: number; retail: number; legalEntity: number;
+  sales: SaleDetail[];
+}
+interface MonthlySummary {
+  total: number; cash: number; card: number;
+  salesCount: number; retail: number; legalEntity: number;
+  activeDays: number; avgPerDay: number;
+}
+interface MonthlyData {
+  year: number; month: number; daysInMonth: number;
+  summary: MonthlySummary;
+  days: DayData[];
+}
+
 const fmt    = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
 const fmtDay = (s: string) => {
   const d = new Date(s);
   return d.toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short' });
 };
-const fmtFull = (s: string) => {
-  const d = new Date(s);
-  return d.toLocaleDateString('uz-UZ', { weekday: 'short', day: 'numeric', month: 'short' });
-};
+
+const OY_NOMLARI = [
+  'Yanvar','Fevral','Mart','Aprel','May','Iyun',
+  'Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr',
+];
+const HAFTA = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
 
 type RangeKey = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
@@ -85,134 +117,443 @@ function StatCard({ label, value, sub, icon: Icon, bg, change, changeLabel }: {
 }
 
 /* ── Bar Chart ── */
-function BarChart({ data, label }: { data: DailySale[]; label: string }) {
+function BarChart({ data }: { data: DailySale[] }) {
   if (!data.length) return (
     <div className="flex flex-col items-center justify-center py-12 text-gray-300">
       <BarChart2 className="w-12 h-12 mb-2" />
       <p className="text-sm">Ma&apos;lumot yo&apos;q</p>
     </div>
   );
-
-  const max = Math.max(...data.map(d => d.revenue), 1);
-  const totalRevenue = data.reduce((s, d) => s + d.revenue, 0);
-  const avgRevenue   = totalRevenue / data.length;
-  const peakDay      = data.reduce((a, b) => b.revenue > a.revenue ? b : a, data[0]);
+  const max        = Math.max(...data.map(d => d.revenue), 1);
+  const totalRev   = data.reduce((s, d) => s + d.revenue, 0);
+  const avgRev     = totalRev / data.length;
+  const peakDay    = data.reduce((a, b) => b.revenue > a.revenue ? b : a, data[0]);
 
   return (
     <div>
-      {/* Summary mini cards */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500 mb-0.5">Jami</p>
-          <p className="text-sm font-bold text-gray-900">{fmt(totalRevenue)}</p>
-          <p className="text-xs text-gray-400">so&apos;m</p>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500 mb-0.5">O&apos;rtacha/kun</p>
-          <p className="text-sm font-bold text-gray-900">{fmt(avgRevenue)}</p>
-          <p className="text-xs text-gray-400">so&apos;m</p>
-        </div>
-        <div className="bg-green-50 rounded-lg p-3 text-center">
-          <p className="text-xs text-gray-500 mb-0.5">Eng yaxshi kun</p>
-          <p className="text-sm font-bold text-green-700">{peakDay.revenue > 0 ? fmtDay(peakDay.date) : '—'}</p>
-          <p className="text-xs text-gray-400">{fmt(peakDay.revenue)} so&apos;m</p>
-        </div>
+      <div className="flex items-center gap-4 text-xs text-gray-400 mb-3">
+        <span>Eng yuqori: <b className="text-gray-700">{fmtDay(peakDay.date)} — {fmt(peakDay.revenue)} so'm</b></span>
+        <span>O'rtacha: <b className="text-gray-700">{fmt(avgRev)} so'm</b></span>
       </div>
-
-      {/* Chart */}
-      <div className="relative">
-        <p className="text-xs font-medium text-gray-500 mb-3">{label}</p>
-
-        {/* Y axis labels */}
-        <div className="flex gap-2">
-          <div className="flex flex-col justify-between text-right w-16 flex-shrink-0 py-1">
-            {[max, max * 0.75, max * 0.5, max * 0.25, 0].map((v, i) => (
-              <span key={i} className="text-xs text-gray-400">{v > 0 ? (v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : fmt(v)) : '0'}</span>
-            ))}
-          </div>
-
-          {/* Bars */}
-          <div className="flex-1 relative">
-            {/* Grid lines */}
-            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-              {[0, 1, 2, 3, 4].map(i => (
-                <div key={i} className="border-t border-dashed border-gray-100 w-full" />
-              ))}
-            </div>
-
-            <div className="flex items-end gap-1 h-48 relative">
-              {data.map((day, i) => {
-                const h    = max > 0 ? (day.revenue / max) * 100 : 0;
-                const isPeak = day.date === peakDay.date && day.revenue > 0;
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs rounded-lg px-2.5 py-1.5 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition-opacity">
-                      <p className="font-semibold">{fmtFull(day.date)}</p>
-                      <p className="text-green-300">{fmt(day.revenue)} so&apos;m</p>
-                    </div>
-                    {/* Bar */}
-                    <div
-                      className={`w-full rounded-t-md transition-all duration-500 ${
-                        isPeak ? 'bg-gray-900' : 'bg-blue-400 group-hover:bg-blue-500'
-                      }`}
-                      style={{ height: `${Math.max(h, day.revenue > 0 ? 2 : 0)}%` }}
-                    />
+      <div className="flex items-end gap-1 h-40">
+        {data.map((day, i) => {
+          const h = max > 0 ? (day.revenue / max) * 100 : 0;
+          const isPeak = day.date === peakDay.date;
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+              <div className="relative w-full flex items-end justify-center" style={{ height: '136px' }}>
+                {day.revenue > 0 && (
+                  <div className="absolute bottom-full mb-1 hidden group-hover:block z-10 bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                    {fmtDay(day.date)}: {fmt(day.revenue)} so'm
                   </div>
-                );
-              })}
+                )}
+                <div
+                  className={`w-full rounded-t transition-all ${isPeak ? 'bg-gray-900' : day.revenue > 0 ? 'bg-gray-400 group-hover:bg-gray-600' : 'bg-gray-100'}`}
+                  style={{ height: `${Math.max(h, day.revenue > 0 ? 4 : 2)}%` }}
+                />
+              </div>
             </div>
-
-            {/* X axis labels */}
-            <div className="flex gap-1 mt-2">
-              {data.map((day, i) => {
-                const show = data.length <= 10 || i % Math.ceil(data.length / 10) === 0 || i === data.length - 1;
-                return (
-                  <div key={i} className="flex-1 text-center">
-                    {show && <span className="text-xs text-gray-400">{fmtDay(day.date)}</span>}
-                  </div>
-                );
-              })}
+          );
+        })}
+      </div>
+      <div className="flex gap-1 mt-2">
+        {data.map((day, i) => {
+          const show = data.length <= 10 || i % Math.ceil(data.length / 10) === 0 || i === data.length - 1;
+          return (
+            <div key={i} className="flex-1 text-center">
+              {show && <span className="text-xs text-gray-400">{fmtDay(day.date)}</span>}
             </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-/* ── Sparkline (mini trend) ── */
+/* ── Sparkline ── */
 function Sparkline({ data }: { data: DailySale[] }) {
   if (data.length < 2) return null;
   const max  = Math.max(...data.map(d => d.revenue), 1);
-  const w    = 80;
-  const h    = 28;
+  const w = 80; const h = 28;
   const step = w / (data.length - 1);
   const pts  = data.map((d, i) => {
     const x = i * step;
     const y = h - (d.revenue / max) * (h - 4) - 2;
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
-
-  const last  = data[data.length - 1].revenue;
-  const first = data[0].revenue;
-  const up    = last >= first;
-
+  const up = data[data.length - 1].revenue >= data[0].revenue;
   return (
     <svg width={w} height={h} className="mt-1">
-      <polyline
-        points={pts}
-        fill="none"
+      <polyline points={pts} fill="none"
         stroke={up ? '#16a34a' : '#dc2626'}
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+        strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
 
-/* ── Main ── */
+/* ══════════════════════════════════════════════════════
+   OY BO'YICHA 30 KUNLIK JADVAL KOMPONENTI
+══════════════════════════════════════════════════════ */
+
+/* Oy tanlash modal */
+function MonthPickerModal({
+  year, month, onSelect, onClose,
+}: {
+  year: number; month: number;
+  onSelect: (y: number, m: number) => void;
+  onClose: () => void;
+}) {
+  const [viewYear, setViewYear] = useState(year);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-80 p-5" onClick={e => e.stopPropagation()}>
+        {/* Yil navigatsiya */}
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => setViewYear(v => v - 1)}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <ChevronLeft className="w-5 h-5 text-gray-600" />
+          </button>
+          <span className="font-bold text-gray-900 text-lg">{viewYear}</span>
+          <button onClick={() => setViewYear(v => v + 1)}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <ChevronRight className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
+
+        {/* Oylar grid */}
+        <div className="grid grid-cols-3 gap-2">
+          {OY_NOMLARI.map((name, i) => {
+            const m        = i + 1;
+            const isCur    = viewYear === year && m === month;
+            const now      = new Date();
+            const isFuture = viewYear > now.getFullYear() ||
+              (viewYear === now.getFullYear() && m > now.getMonth() + 1);
+            return (
+              <button key={m}
+                disabled={isFuture}
+                onClick={() => { onSelect(viewYear, m); onClose(); }}
+                className={`py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  isCur
+                    ? 'bg-gray-900 text-white shadow-md'
+                    : isFuture
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'hover:bg-gray-100 text-gray-700'
+                }`}>
+                {name}
+              </button>
+            );
+          })}
+        </div>
+
+        <button onClick={onClose}
+          className="mt-4 w-full py-2 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
+          Bekor qilish
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* Kun detali panel */
+function DayDetailPanel({ day, onClose }: { day: DayData; onClose: () => void }) {
+  const date = new Date(day.date);
+  const weekDay = HAFTA[date.getDay()];
+  const hasLE = day.sales.some(s => s.legalEntity);
+
+  return (
+    <div className="border border-gray-200 rounded-xl bg-gray-50 p-4 mt-1 animate-in fade-in slide-in-from-top-2 duration-200">
+      {/* Panel header */}
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <span className="font-bold text-gray-900">
+            {weekDay}, {day.day} {OY_NOMLARI[date.getMonth()]}
+          </span>
+          <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
+            {day.salesCount} ta sotuv
+          </span>
+        </div>
+        <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-lg transition-colors">
+          <X className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
+
+      {/* Umumiy raqamlar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+        {[
+          { label: 'Jami', value: day.total, color: 'bg-gray-900 text-white' },
+          { label: 'Naqd', value: day.cash,  color: 'bg-green-50 text-green-800 border border-green-200' },
+          { label: 'Karta', value: day.card, color: 'bg-blue-50 text-blue-800 border border-blue-200' },
+          { label: 'Y/Sh', value: day.legalEntity, color: 'bg-purple-50 text-purple-800 border border-purple-200' },
+        ].map(item => (
+          <div key={item.label} className={`rounded-xl p-3 ${item.color}`}>
+            <p className="text-xs opacity-70 mb-0.5">{item.label}</p>
+            <p className="font-bold text-sm">{fmt(item.value)} so'm</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Sotuvlar ro'yxati */}
+      {day.sales.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-4">Bu kunda sotuv yo&apos;q</p>
+      ) : (
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {day.sales.map((sale, idx) => {
+            const time = new Date(sale.createdAt).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
+            const isLE = sale.saleType === 'LEGAL_ENTITY' || !!sale.legalEntity;
+            return (
+              <div key={sale.id} className="bg-white rounded-xl border border-gray-200 p-3">
+                {/* Sotuv header */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 font-mono">#{idx + 1}</span>
+                    <span className="text-xs text-gray-400">{time}</span>
+                    {/* To'lov turi */}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      sale.paymentType === 'CASH'  ? 'bg-green-100 text-green-700' :
+                      sale.paymentType === 'CARD'  ? 'bg-blue-100 text-blue-700' :
+                                                      'bg-orange-100 text-orange-700'
+                    }`}>
+                      {sale.paymentType === 'CASH' ? 'Naqd' : sale.paymentType === 'CARD' ? 'Karta' : 'Aralash'}
+                    </span>
+                    {/* Y/Sh belgisi */}
+                    {isLE && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                        Y/Sh
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-bold text-gray-900 text-sm">{fmt(sale.totalAmount)} so'm</span>
+                </div>
+
+                {/* Kassir va Y/Sh */}
+                <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-2">
+                  <span>👤 {sale.cashier.name}</span>
+                  {sale.legalEntity && (
+                    <span className="text-purple-600 font-medium">
+                      🏢 {sale.legalEntity.name} — {sale.legalEntity.phone}
+                    </span>
+                  )}
+                  {sale.paymentType === 'MIXED' && (
+                    <span>
+                      Naqd: {fmt(sale.cashAmount ?? 0)} | Karta: {fmt(sale.cardAmount ?? 0)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Mahsulotlar */}
+                <div className="space-y-1">
+                  {sale.saleItems.map((item, ii) => (
+                    <div key={ii} className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 rounded-lg px-2 py-1">
+                      <span className="truncate max-w-[60%]">{item.product?.name || item.itemName}</span>
+                      <span className="text-gray-400">{item.quantity} × {fmt(item.priceAtSale)}</span>
+                      <span className="font-medium text-gray-700">{fmt(item.quantity * item.priceAtSale)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Asosiy oy statistikasi komponenti */
+function MonthlyStatsSection() {
+  const now = new Date();
+  const [year,        setYear]        = useState(now.getFullYear());
+  const [month,       setMonth]       = useState(now.getMonth() + 1);
+  const [pickerOpen,  setPickerOpen]  = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [data,        setData]        = useState<MonthlyData | null>(null);
+  const [expandedDay, setExpandedDay] = useState<number | null>(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setExpandedDay(null);
+    try {
+      const res  = await fetch(`/api/dashboard/daily-sales?year=${year}&month=${month}`);
+      const json = await res.json();
+      if (!json.error) setData(json);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, [year, month]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleDayClick = (day: number) => {
+    setExpandedDay(prev => prev === day ? null : day);
+  };
+
+  const maxDaily = data ? Math.max(...data.days.map(d => d.total), 1) : 1;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <h3 className="font-bold text-gray-900 flex items-center gap-2">
+          <Calendar className="w-5 h-5 text-gray-500" />
+          Oylik statistika
+        </h3>
+
+        {/* Oy tanlash tugmasi */}
+        <button
+          onClick={() => setPickerOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-semibold text-gray-800 transition-colors"
+        >
+          <Calendar className="w-4 h-4" />
+          {OY_NOMLARI[month - 1]} {year}
+          <ChevronDown className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
+
+      {/* Oy summary kartalar */}
+      {data && !loading && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-100">
+          {[
+            { label: 'Jami daromad',   value: data.summary.total,      sub: `${data.summary.salesCount} ta sotuv`, color: 'text-gray-900' },
+            { label: 'Naqd',           value: data.summary.cash,       sub: data.summary.total > 0 ? `${((data.summary.cash/data.summary.total)*100).toFixed(0)}%` : '—', color: 'text-green-700' },
+            { label: 'Karta',          value: data.summary.card,       sub: data.summary.total > 0 ? `${((data.summary.card/data.summary.total)*100).toFixed(0)}%` : '—', color: 'text-blue-700' },
+            { label: 'Faol kunlar',    value: data.summary.activeDays, sub: `O'rtacha: ${fmt(data.summary.avgPerDay)} so'm`, color: 'text-gray-700', isCount: true },
+          ].map(item => (
+            <div key={item.label} className="bg-white px-4 py-3">
+              <p className="text-xs text-gray-500 mb-1">{item.label}</p>
+              <p className={`text-xl font-bold ${item.color}`}>
+                {item.isCount ? item.value : fmt(item.value as number)}
+                {!item.isCount && <span className="text-xs font-normal text-gray-400 ml-1">so'm</span>}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">{item.sub}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Jadval */}
+      <div className="p-4">
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <svg className="animate-spin w-8 h-8 text-gray-300" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+          </div>
+        ) : !data ? null : (
+          <div className="space-y-1">
+            {/* Jadval sarlavhasi */}
+            <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="col-span-1">Kun</div>
+              <div className="col-span-2">Hafta</div>
+              <div className="col-span-3">Jami summa</div>
+              <div className="col-span-2">Naqd</div>
+              <div className="col-span-2">Karta</div>
+              <div className="col-span-1 text-center">Sotuv</div>
+              <div className="col-span-1 text-center">↕</div>
+            </div>
+
+            {data.days.map(day => {
+              const date     = new Date(day.date);
+              const weekDay  = HAFTA[date.getDay()];
+              const isToday  = day.date === new Date().toISOString().split('T')[0];
+              const isEmpty  = day.salesCount === 0;
+              const isOpen   = expandedDay === day.day;
+              const barWidth = day.total > 0 ? (day.total / maxDaily) * 100 : 0;
+
+              return (
+                <div key={day.day}>
+                  <div
+                    onClick={() => !isEmpty && handleDayClick(day.day)}
+                    className={`grid grid-cols-12 gap-2 px-3 py-2.5 rounded-xl transition-colors items-center ${
+                      isEmpty
+                        ? 'opacity-40 cursor-default'
+                        : 'cursor-pointer hover:bg-gray-50 active:bg-gray-100'
+                    } ${isToday ? 'ring-2 ring-gray-900 ring-inset bg-gray-50' : ''}
+                      ${isOpen ? 'bg-gray-50' : ''}`}
+                  >
+                    {/* Kun raqami */}
+                    <div className="col-span-1">
+                      <span className={`text-sm font-bold ${isToday ? 'text-gray-900' : 'text-gray-600'}`}>
+                        {day.day}
+                      </span>
+                      {isToday && <span className="block text-xs text-orange-500 font-medium leading-none">bugun</span>}
+                    </div>
+
+                    {/* Hafta kuni */}
+                    <div className="col-span-2 text-sm text-gray-500">{weekDay}</div>
+
+                    {/* Jami — progress bar bilan */}
+                    <div className="col-span-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-gray-100 rounded-full h-1.5 max-w-16">
+                          <div className="bg-gray-700 h-1.5 rounded-full" style={{ width: `${barWidth}%` }} />
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                          {isEmpty ? '—' : `${fmt(day.total)}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Naqd */}
+                    <div className="col-span-2 text-sm text-green-700 font-medium">
+                      {isEmpty ? '—' : fmt(day.cash)}
+                    </div>
+
+                    {/* Karta */}
+                    <div className="col-span-2 text-sm text-blue-700 font-medium">
+                      {isEmpty ? '—' : fmt(day.card)}
+                    </div>
+
+                    {/* Sotuv soni */}
+                    <div className="col-span-1 text-center">
+                      {isEmpty ? (
+                        <span className="text-xs text-gray-300">0</span>
+                      ) : (
+                        <span className="inline-flex items-center justify-center w-6 h-6 bg-gray-900 text-white text-xs font-bold rounded-full">
+                          {day.salesCount}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Ochish/yopish */}
+                    <div className="col-span-1 text-center">
+                      {!isEmpty && (
+                        isOpen
+                          ? <ChevronUp className="w-4 h-4 text-gray-400 mx-auto" />
+                          : <ChevronDown className="w-4 h-4 text-gray-400 mx-auto" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Kun detali */}
+                  {isOpen && (
+                    <DayDetailPanel
+                      day={day}
+                      onClose={() => setExpandedDay(null)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Oy tanlash modal */}
+      {pickerOpen && (
+        <MonthPickerModal
+          year={year} month={month}
+          onSelect={(y, m) => { setYear(y); setMonth(m); }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   ASOSIY SAHIFA
+══════════════════════════════════════════════════════ */
 export default function StatisticsPage() {
   const [range,       setRange]       = useState<RangeKey>('week');
   const [customStart, setCustomStart] = useState('');
@@ -257,15 +598,11 @@ export default function StatisticsPage() {
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">Savdo tahlili va ko&apos;rsatkichlar</p>
         </div>
-
-        {/* Range selector */}
         <div className="flex gap-1.5 bg-gray-100 rounded-xl p-1">
           {RANGES.map(r => (
             <button key={r.key} onClick={() => setRange(r.key)}
               className={`px-3.5 py-1.5 text-sm rounded-lg font-medium transition-all ${
-                range === r.key
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
+                range === r.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}>
               {r.label}
             </button>
@@ -273,7 +610,7 @@ export default function StatisticsPage() {
         </div>
       </div>
 
-      {/* Custom date range */}
+      {/* Custom date */}
       {range === 'custom' && (
         <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-end gap-4">
           <div>
@@ -293,22 +630,21 @@ export default function StatisticsPage() {
         </div>
       )}
 
+      {/* ══ OYLIK JADVAL (har doim ko'rsatiladi) ══ */}
+      <MonthlyStatsSection />
+
+      {/* ══ QISQA DAVR STATISTIKASI ══ */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-24">
+        <div className="flex flex-col items-center justify-center py-16">
           <svg className="animate-spin w-10 h-10 text-gray-300" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
           </svg>
           <p className="text-gray-400 mt-3 text-sm">Yuklanmoqda...</p>
         </div>
-      ) : !stats ? (
-        <div className="flex flex-col items-center justify-center py-24 text-gray-400">
-          <BarChart2 className="w-14 h-14 mb-3 text-gray-200" />
-          <p>Ma&apos;lumot topilmadi</p>
-        </div>
-      ) : (
+      ) : !stats ? null : (
         <>
-          {/* ── Stat Cards (2 rows) ── */}
+          {/* Stat Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard label="Jami daromad" value={`${fmt(stats.totalRevenue)} so'm`}
               sub={`${stats.salesCount} ta sotuv`} icon={TrendingUp} bg="bg-gray-900"
@@ -324,7 +660,7 @@ export default function StatisticsPage() {
               icon={CreditCard} bg="bg-purple-600" />
           </div>
 
-          {/* ── Oddiy / Y/Sh ── */}
+          {/* Oddiy / Y/Sh */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
@@ -341,7 +677,6 @@ export default function StatisticsPage() {
               <p className="text-2xl font-bold text-gray-900">{fmt(stats.retailRevenue)}</p>
               <p className="text-xs text-gray-400 mt-0.5">so&apos;m</p>
               {dailySales.length > 1 && <Sparkline data={dailySales} />}
-              {/* Progress bar vs total */}
               {stats.totalRevenue > 0 && (
                 <div className="mt-3">
                   <div className="flex justify-between text-xs text-gray-400 mb-1">
@@ -349,7 +684,7 @@ export default function StatisticsPage() {
                     <span>{((stats.retailRevenue/stats.totalRevenue)*100).toFixed(1)}%</span>
                   </div>
                   <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div className="bg-gray-900 h-2 rounded-full transition-all"
+                    <div className="bg-gray-900 h-2 rounded-full"
                       style={{ width: `${(stats.retailRevenue/stats.totalRevenue)*100}%` }} />
                   </div>
                 </div>
@@ -377,7 +712,7 @@ export default function StatisticsPage() {
                     <span>{((stats.legalEntityRevenue/stats.totalRevenue)*100).toFixed(1)}%</span>
                   </div>
                   <div className="w-full bg-blue-100 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full transition-all"
+                    <div className="bg-blue-500 h-2 rounded-full"
                       style={{ width: `${(stats.legalEntityRevenue/stats.totalRevenue)*100}%` }} />
                   </div>
                 </div>
@@ -385,24 +720,20 @@ export default function StatisticsPage() {
             </div>
           </div>
 
-          {/* ── Grafik ── */}
+          {/* Grafik */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-bold text-gray-900 flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-gray-500" />
                 Savdo dinamikasi
               </h3>
-              <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
-                {rangeLabel}
-              </span>
+              <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">{rangeLabel}</span>
             </div>
-            <BarChart data={dailySales} label={`${rangeLabel} savdo grafigi`} />
+            <BarChart data={dailySales} />
           </div>
 
-          {/* ── Top mahsulotlar + To'lov taqsimoti ── */}
+          {/* Top mahsulotlar + To'lov taqsimoti */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-            {/* Top mahsulotlar */}
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <Package className="w-4 h-4 text-gray-500" />
@@ -411,8 +742,7 @@ export default function StatisticsPage() {
               </h3>
               {topProducts.length === 0 ? (
                 <div className="py-8 text-center text-gray-300">
-                  <Users className="w-10 h-10 mx-auto mb-2" />
-                  <p className="text-sm">Sotuv yo&apos;q</p>
+                  <Users className="w-10 h-10 mx-auto mb-2" /><p className="text-sm">Sotuv yo&apos;q</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -431,8 +761,9 @@ export default function StatisticsPage() {
                             <span className="text-gray-500 flex-shrink-0">{p.quantity} dona</span>
                           </div>
                           <div className="w-full bg-gray-100 rounded-full h-1.5">
-                            <div className={`h-1.5 rounded-full transition-all ${
-                              i === 0 ? 'bg-yellow-400' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-400' : 'bg-blue-400'
+                            <div className={`h-1.5 rounded-full ${
+                              i === 0 ? 'bg-yellow-400' : i === 1 ? 'bg-gray-400' :
+                              i === 2 ? 'bg-orange-400' : 'bg-blue-400'
                             }`} style={{ width: `${pct}%` }} />
                           </div>
                         </div>
@@ -455,14 +786,13 @@ export default function StatisticsPage() {
               </h3>
               {stats.totalRevenue === 0 ? (
                 <div className="py-8 text-center text-gray-300">
-                  <CreditCard className="w-10 h-10 mx-auto mb-2" />
-                  <p className="text-sm">Sotuv yo&apos;q</p>
+                  <CreditCard className="w-10 h-10 mx-auto mb-2" /><p className="text-sm">Sotuv yo&apos;q</p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {[
-                    { label: 'Naqd pul', value: stats.totalCash,  pct: stats.totalRevenue > 0 ? (stats.totalCash/stats.totalRevenue)*100 : 0,  color: 'bg-green-500', icon: Banknote, tc: 'text-green-700' },
-                    { label: 'Karta',    value: stats.totalCard,  pct: stats.totalRevenue > 0 ? (stats.totalCard/stats.totalRevenue)*100 : 0,  color: 'bg-blue-500',  icon: CreditCard, tc: 'text-blue-700' },
+                    { label: 'Naqd pul', value: stats.totalCash, pct: (stats.totalCash/stats.totalRevenue)*100, color: 'bg-green-500', icon: Banknote, tc: 'text-green-700' },
+                    { label: 'Karta',    value: stats.totalCard, pct: (stats.totalCard/stats.totalRevenue)*100, color: 'bg-blue-500',  icon: CreditCard, tc: 'text-blue-700' },
                   ].map(({ label, value, pct, color, icon: Icon, tc }) => (
                     <div key={label}>
                       <div className="flex items-center justify-between mb-1.5">
@@ -477,32 +807,23 @@ export default function StatisticsPage() {
                         </div>
                       </div>
                       <div className="w-full bg-gray-100 rounded-full h-3">
-                        <div className={`${color} h-3 rounded-full transition-all duration-700`}
-                          style={{ width: `${pct}%` }} />
+                        <div className={`${color} h-3 rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   ))}
-
-                  {/* Donut-style summary */}
-                  <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="mt-4 pt-4 border-t border-gray-100 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-500">Jami daromad</span>
-                      <div>
-                        <span className="text-lg font-bold text-gray-900">{fmt(stats.totalRevenue)}</span>
-                        <span className="text-sm text-gray-400 ml-1">so&apos;m</span>
-                      </div>
+                      <span className="text-sm text-gray-500">Jami daromad</span>
+                      <span className="text-lg font-bold text-gray-900">{fmt(stats.totalRevenue)} <span className="text-sm font-normal text-gray-400">so'm</span></span>
                     </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-sm font-medium text-gray-500">Sotuvlar soni</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-500">Sotuvlar soni</span>
                       <span className="text-lg font-bold text-gray-900">{stats.salesCount}</span>
                     </div>
                     {stats.salesCount > 0 && (
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-sm font-medium text-gray-500">O&apos;rtacha chek</span>
-                        <div>
-                          <span className="text-lg font-bold text-gray-900">{fmt(stats.totalRevenue / stats.salesCount)}</span>
-                          <span className="text-sm text-gray-400 ml-1">so&apos;m</span>
-                        </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">O&apos;rtacha chek</span>
+                        <span className="text-lg font-bold text-gray-900">{fmt(stats.totalRevenue / stats.salesCount)} <span className="text-sm font-normal text-gray-400">so'm</span></span>
                       </div>
                     )}
                   </div>
