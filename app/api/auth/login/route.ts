@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         name: user.name,
         login: user.login,
         role: user.role,
-        branch: user.branch.name,
+        branch: user.branch?.name ?? 'Super Admin',
       },
     });
   } catch (error) {
