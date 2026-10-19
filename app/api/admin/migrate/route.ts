@@ -268,7 +268,25 @@ export async function GET(request: NextRequest) {
         SET "role"='SUPER_ADMIN', "branchId"=NULL, "updatedAt"=NOW()
     `);
 
-    // ── 13. PRISMA MIGRATIONS TABLE ──────────────────────────────
+    // ── 13. CATEGORIES / SUPPLIERS / LEGAL_ENTITIES — branchId ──
+    await run('categories branchId column', `
+      ALTER TABLE "categories" ADD COLUMN IF NOT EXISTS "branchId" TEXT NOT NULL DEFAULT 'default-branch'
+    `);
+    await run('suppliers branchId column', `
+      ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "branchId" TEXT NOT NULL DEFAULT 'default-branch'
+    `);
+    await run('legal_entities branchId column', `
+      ALTER TABLE "legal_entities" ADD COLUMN IF NOT EXISTS "branchId" TEXT NOT NULL DEFAULT 'default-branch'
+    `);
+    // Eski unique constraint olib tashlanadi, yangi (name, branchId) unique qo'shiladi
+    await run('categories drop old unique', `
+      ALTER TABLE "categories" DROP CONSTRAINT IF EXISTS "categories_name_key"
+    `);
+    await run('categories new unique (name, branchId)', `
+      CREATE UNIQUE INDEX IF NOT EXISTS "categories_name_branchId_key" ON "categories"("name", "branchId")
+    `);
+
+    // ── 14. PRISMA MIGRATIONS TABLE ──────────────────────────────
     await run('prisma migrations table', `
       CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
         "id"                  VARCHAR(36)  NOT NULL,

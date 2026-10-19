@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// GET - Bitta yuridik shaxs
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -9,29 +8,34 @@ export async function GET(
   try {
     const { id } = await context.params;
 
-    const entity = await prisma.legalEntity.findUnique({
-      where: { id },
-      include: {
-        sales: {
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-          include: {
-            cashier:   { select: { name: true } },
-            saleItems: { select: { itemName: true, quantity: true, priceAtSale: true } },
-          },
-        },
-      },
-    });
+    const rows = await prisma.$queryRaw<{
+      id: string; name: string; phone: string; branchId: string; createdAt: Date;
+    }[]>`
+      SELECT id, name, phone, "branchId", "createdAt" FROM "legal_entities" WHERE id = ${id} LIMIT 1
+    `;
+    if (rows.length === 0) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 });
 
-    if (!entity) return NextResponse.json({ error: 'Topilmadi' }, { status: 404 });
-    return NextResponse.json(entity);
+    const sales = await prisma.$queryRaw<{
+      id: string; totalAmount: number; paymentType: string;
+      createdAt: Date; cashierName: string | null;
+    }[]>`
+      SELECT s.id, s."totalAmount", s."paymentType"::TEXT AS "paymentType",
+             s."createdAt", u.name AS "cashierName"
+      FROM "sales" s
+      LEFT JOIN "users" u ON u.id = s."cashierId"
+      WHERE s."legalEntityId" = ${id}
+      ORDER BY s."createdAt" DESC
+      LIMIT 20
+    `;
+
+    return NextResponse.json({ ...rows[0], sales: sales.map(s => ({ ...s, totalAmount: Number(s.totalAmount) })) });
   } catch (error) {
     console.error('Legal entity GET error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
-// PUT - Tahrirlash
 export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -43,29 +47,31 @@ export async function PUT(
     if (!name?.trim())  return NextResponse.json({ error: 'Ism kiritilmagan' },   { status: 400 });
     if (!phone?.trim()) return NextResponse.json({ error: 'Telefon kiritilmagan' }, { status: 400 });
 
-    const entity = await prisma.legalEntity.update({
-      where: { id },
-      data:  { name: name.trim(), phone: phone.trim() },
-    });
+    await prisma.$executeRaw`
+      UPDATE "legal_entities"
+      SET name = ${name.trim()}, phone = ${phone.trim()}, "updatedAt" = NOW()
+      WHERE id = ${id}
+    `;
 
-    return NextResponse.json(entity);
+    return NextResponse.json({ id, name: name.trim(), phone: phone.trim() });
   } catch (error) {
     console.error('Legal entity PUT error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
-// DELETE - O'chirish
 export async function DELETE(
   _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await context.params;
-    await prisma.legalEntity.delete({ where: { id } });
+    await prisma.$executeRaw`DELETE FROM "legal_entities" WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Legal entity DELETE error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

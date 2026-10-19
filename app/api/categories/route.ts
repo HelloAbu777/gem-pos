@@ -1,42 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getSession } from '@/lib/auth/session';
 
-// GET - Barcha kategoriyalar
+const DEFAULT_BRANCH_ID = 'default-branch';
+
 export async function GET() {
   try {
-    const categories = await prisma.category.findMany({
-      orderBy: { name: 'asc' },
-      include: {
-        _count: { select: { products: true } },
-      },
-    });
-    return NextResponse.json(categories);
+    const session  = await getSession();
+    const branchId = session?.branchId ?? DEFAULT_BRANCH_ID;
+
+    const categories = await prisma.$queryRaw<{
+      id: string; name: string; branchId: string;
+      createdAt: Date; updatedAt: Date; productCount: bigint;
+    }[]>`
+      SELECT c.id, c.name, c."branchId", c."createdAt", c."updatedAt",
+             COUNT(p.id) AS "productCount"
+      FROM "categories" c
+      LEFT JOIN "products" p ON p."categoryId" = c.id
+      WHERE c."branchId" = ${branchId}
+      GROUP BY c.id
+      ORDER BY c.name ASC
+    `;
+
+    return NextResponse.json(
+      categories.map(c => ({
+        id:        c.id,
+        name:      c.name,
+        branchId:  c.branchId,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        _count:    { products: Number(c.productCount) },
+      }))
+    );
   } catch (error) {
     console.error('Categories GET error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
-// POST - Yangi kategoriya yaratish
 export async function POST(request: NextRequest) {
   try {
+    const session  = await getSession();
+    const branchId = session?.branchId ?? DEFAULT_BRANCH_ID;
     const { name } = await request.json();
 
-    if (!name?.trim()) {
-      return NextResponse.json({ error: 'Kategoriya nomi kiritilmagan' }, { status: 400 });
-    }
+    if (!name?.trim()) return NextResponse.json({ error: 'Kategoriya nomi kiritilmagan' }, { status: 400 });
 
-    const existing = await prisma.category.findUnique({ where: { name: name.trim() } });
-    if (existing) {
-      return NextResponse.json({ error: 'Bu kategoriya allaqachon mavjud' }, { status: 400 });
-    }
+    // Faqat shu filialdagi kategoriyalar ichida tekshirish
+    const existing = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "categories"
+      WHERE name = ${name.trim()} AND "branchId" = ${branchId}
+      LIMIT 1
+    `;
+    if (existing.length > 0) return NextResponse.json({ error: 'Bu kategoriya allaqachon mavjud' }, { status: 400 });
 
-    const category = await prisma.category.create({
-      data: { name: name.trim() },
-      include: { _count: { select: { products: true } } },
-    });
+    const id = `cat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    await prisma.$executeRaw`
+      INSERT INTO "categories" ("id","name","branchId","createdAt","updatedAt")
+      VALUES (${id}, ${name.trim()}, ${branchId}, NOW(), NOW())
+    `;
 
-    return NextResponse.json(category, { status: 201 });
+    return NextResponse.json({ id, name: name.trim(), branchId, _count: { products: 0 } }, { status: 201 });
   } catch (error) {
     console.error('Categories POST error:', error);
     const msg = error instanceof Error ? error.message : 'Server xatosi';

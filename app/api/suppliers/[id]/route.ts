@@ -13,14 +13,18 @@ export async function PUT(
     if (!contactPerson?.trim()) return NextResponse.json({ error: "Mas'ul shaxs kiritilmagan" }, { status: 400 });
     if (!phone?.trim())         return NextResponse.json({ error: 'Telefon kiritilmagan' }, { status: 400 });
 
-    const supplier = await prisma.supplier.update({
-      where: { id },
-      data: { name: name.trim(), contactPerson: contactPerson.trim(), phone: phone.trim() },
-    });
-    return NextResponse.json(supplier);
+    await prisma.$executeRaw`
+      UPDATE "suppliers"
+      SET name = ${name.trim()}, "contactPerson" = ${contactPerson.trim()},
+          phone = ${phone.trim()}, "updatedAt" = NOW()
+      WHERE id = ${id}
+    `;
+
+    return NextResponse.json({ id, name: name.trim(), contactPerson: contactPerson.trim(), phone: phone.trim() });
   } catch (error) {
     console.error('Supplier PUT error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
@@ -30,17 +34,23 @@ export async function DELETE(
 ) {
   try {
     const { id } = await context.params;
-    const count = await prisma.product.count({ where: { supplierId: id } });
-    if (count > 0) {
+
+    const count = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) AS count FROM "products" WHERE "supplierId" = ${id}
+    `;
+    const n = Number(count[0]?.count ?? 0);
+    if (n > 0) {
       return NextResponse.json(
-        { error: `Bu ta'minotchi ${count} ta mahsulotga bog'liq. Avval mahsulotlarni o'zgartiring.` },
+        { error: `Bu ta'minotchi ${n} ta mahsulotga bog'liq. Avval mahsulotlarni o'zgartiring.` },
         { status: 400 }
       );
     }
-    await prisma.supplier.delete({ where: { id } });
+
+    await prisma.$executeRaw`DELETE FROM "suppliers" WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Supplier DELETE error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

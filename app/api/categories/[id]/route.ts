@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// PUT - Kategoriyani yangilash
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -10,17 +9,16 @@ export async function PUT(
     const { id } = await params;
     const { name } = await request.json();
 
-    if (!name?.trim()) {
-      return NextResponse.json({ error: 'Kategoriya nomi kiritilmagan' }, { status: 400 });
-    }
+    if (!name?.trim()) return NextResponse.json({ error: 'Kategoriya nomi kiritilmagan' }, { status: 400 });
 
-    const category = await prisma.category.update({
-      where: { id },
-      data:  { name: name.trim() },
-      include: { _count: { select: { products: true } } },
-    });
+    await prisma.$executeRaw`
+      UPDATE "categories" SET name = ${name.trim()}, "updatedAt" = NOW() WHERE id = ${id}
+    `;
 
-    return NextResponse.json(category);
+    const updated = await prisma.$queryRaw<{ id: string; name: string; branchId: string }[]>`
+      SELECT id, name, "branchId" FROM "categories" WHERE id = ${id}
+    `;
+    return NextResponse.json({ ...updated[0], _count: { products: 0 } });
   } catch (error) {
     console.error('Category PUT error:', error);
     const msg = error instanceof Error ? error.message : 'Server xatosi';
@@ -28,7 +26,6 @@ export async function PUT(
   }
 }
 
-// DELETE - Kategoriyani o'chirish
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -36,15 +33,18 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const count = await prisma.product.count({ where: { categoryId: id } });
-    if (count > 0) {
+    const count = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*) AS count FROM "products" WHERE "categoryId" = ${id}
+    `;
+    const n = Number(count[0]?.count ?? 0);
+    if (n > 0) {
       return NextResponse.json(
-        { error: `Bu kategoriyada ${count} ta mahsulot bor. Avval mahsulotlarni o'chiring.` },
+        { error: `Bu kategoriyada ${n} ta mahsulot bor. Avval mahsulotlarni o'chiring.` },
         { status: 400 }
       );
     }
 
-    await prisma.category.delete({ where: { id } });
+    await prisma.$executeRaw`DELETE FROM "categories" WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Category DELETE error:', error);

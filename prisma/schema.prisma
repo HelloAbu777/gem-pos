@@ -44,11 +44,13 @@ model Branch {
 // Kategoriyalar
 model Category {
   id        String    @id @default(cuid())
-  name      String    @unique
+  name      String
+  branchId  String    @default("default-branch")
   products  Product[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  @@unique([name, branchId])
   @@map("categories")
 }
 
@@ -58,6 +60,7 @@ model Supplier {
   name          String
   contactPerson String
   phone         String
+  branchId      String    @default("default-branch")
   products      Product[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -131,6 +134,7 @@ model LegalEntity {
   id        String   @id @default(cuid())
   name      String
   phone     String
+  branchId  String   @default("default-branch")
   sales     Sale[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
