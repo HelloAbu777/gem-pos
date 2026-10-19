@@ -11,30 +11,32 @@ export async function PUT(
     const { name, price, costPrice, barcode, isActive } = await request.json();
 
     if (!name?.trim())        return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
-    if (!price || price <= 0) return NextResponse.json({ error: 'Narx noto\'g\'ri' }, { status: 400 });
+    if (!price || price <= 0) return NextResponse.json({ error: "Narx noto'g'ri" }, { status: 400 });
 
-    // Barcode unique tekshirish (o'zidan tashqari)
     if (barcode?.trim()) {
-      const existing = await prisma.dish.findFirst({
-        where: { barcode: barcode.trim(), id: { not: id } },
-      });
-      if (existing) return NextResponse.json({ error: 'Bu barcode allaqachon mavjud' }, { status: 400 });
+      const ex = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "dishes" WHERE barcode = ${barcode.trim()} AND id != ${id} LIMIT 1
+      `;
+      if (ex.length > 0) return NextResponse.json({ error: 'Bu barcode allaqachon mavjud' }, { status: 400 });
     }
 
-    const dish = await prisma.dish.update({
-      where: { id },
-      data: {
-        name:      name.trim(),
-        price:     Number(price),
-        costPrice: Number(costPrice) || 0,
-        barcode:   barcode?.trim() || null,
-        isActive:  isActive ?? true,
-      },
-    });
-    return NextResponse.json(dish);
+    await prisma.$executeRaw`
+      UPDATE "dishes" SET
+        name      = ${name.trim()},
+        price     = ${Number(price)},
+        "costPrice" = ${Number(costPrice) || 0},
+        barcode   = ${barcode?.trim() || null},
+        "isActive" = ${isActive ?? true},
+        "updatedAt" = NOW()
+      WHERE id = ${id}
+    `;
+
+    const updated = await prisma.$queryRaw<object[]>`SELECT * FROM "dishes" WHERE id = ${id}`;
+    return NextResponse.json(updated[0]);
   } catch (error) {
     console.error('Dish PUT error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
@@ -45,10 +47,11 @@ export async function DELETE(
 ) {
   try {
     const { id } = await context.params;
-    await prisma.dish.delete({ where: { id } });
+    await prisma.$executeRaw`DELETE FROM "dishes" WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Dish DELETE error:', error);
-    return NextResponse.json({ error: 'Server xatosi' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : 'Server xatosi';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
