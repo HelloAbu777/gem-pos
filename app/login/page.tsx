@@ -30,7 +30,9 @@ export default function LoginPage() {
       }
 
       // Redirect based on role
-      if (data.user.role === 'CASHIER') {
+      if (data.user.role === 'SUPER_ADMIN') {
+        router.push('/super-admin/dashboard');
+      } else if (data.user.role === 'CASHIER') {
         router.push('/pos');
       } else {
         router.push('/dashboard');

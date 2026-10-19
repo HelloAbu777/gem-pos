@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       login: user.login,
       name: user.name,
-      role: user.role,
-      branchId: user.branchId,
+      role: user.role as 'SUPER_ADMIN' | 'ADMIN' | 'CASHIER',
+      branchId: user.branchId ?? null,
     });
 
     return NextResponse.json({

@@ -11,15 +11,15 @@ datasource db {
   directUrl = env("DATABASE_URL")
 }
 
-// Foydalanuvchilar (Admin va Kassir)
+// Foydalanuvchilar (Super Admin, Admin va Kassir)
 model User {
   id        String   @id @default(cuid())
   name      String
   login     String   @unique
   password  String   // bcrypt hash
-  role      String   @default("CASHIER") // ADMIN | CASHIER
-  branchId  String
-  branch    Branch   @relation(fields: [branchId], references: [id])
+  role      String   @default("CASHIER") // SUPER_ADMIN | ADMIN | CASHIER
+  branchId  String?  // SUPER_ADMIN uchun null bo'lishi mumkin
+  branch    Branch?  @relation(fields: [branchId], references: [id])
   sales     Sale[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
