@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
     }, 0);
 
     // ── Sof foyda (faqat retail) ──────────────────────────────────
+    // Ustuvorlik: item.costPrice (snapshot) → product.purchasePrice (joriy) → 0
     let totalCost = 0;
     for (const sale of retailSales) {
       for (const item of sale.saleItems) {

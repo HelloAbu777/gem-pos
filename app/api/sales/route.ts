@@ -6,11 +6,12 @@ const DEFAULT_BRANCH_ID  = 'default-branch';
 const DEFAULT_CASHIER_ID = 'default-cashier';
 
 interface SaleItemInput {
-  productId?:  string | null;
-  dishId?:     string | null;
-  itemName:    string;
-  quantity:    number;
-  priceAtSale: number;
+  productId?:    string | null;
+  dishId?:       string | null;
+  itemName:      string;
+  quantity:      number;
+  priceAtSale:   number;
+  purchasePrice: number; // tan narxi snapshot
 }
 
 interface SaleRequest {

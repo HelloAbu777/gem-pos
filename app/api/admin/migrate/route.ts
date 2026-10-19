@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
 
     await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "dishes" ("id" TEXT NOT NULL, "name" TEXT NOT NULL, "price" DOUBLE PRECISION NOT NULL, "barcode" TEXT, "isActive" BOOLEAN NOT NULL DEFAULT true, "branchId" TEXT NOT NULL DEFAULT 'default-branch', "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "dishes_pkey" PRIMARY KEY ("id"));`);
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "dishes_barcode_key" ON "dishes"("barcode");`);
+    // costPrice ustunini qo'shish (mavjud jadvalga)
+    await prisma.$executeRawUnsafe(`ALTER TABLE "dishes" ADD COLUMN IF NOT EXISTS "costPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
     steps.push('dishes');
 
     await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "sales" ("id" TEXT NOT NULL, "totalAmount" DOUBLE PRECISION NOT NULL, "paymentType" "PaymentType" NOT NULL, "cashAmount" DOUBLE PRECISION, "cardAmount" DOUBLE PRECISION, "saleType" "SaleType" NOT NULL DEFAULT 'RETAIL', "cashierId" TEXT NOT NULL, "branchId" TEXT NOT NULL, "legalEntityId" TEXT, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT "sales_pkey" PRIMARY KEY ("id"));`);
@@ -81,6 +83,11 @@ export async function GET(request: NextRequest) {
     await prisma.$executeRawUnsafe(`ALTER TABLE "warehouse_items" ADD COLUMN IF NOT EXISTS "vatType" TEXT NOT NULL DEFAULT 'NO_VAT';`);
     await prisma.$executeRawUnsafe(`ALTER TABLE "warehouse_items" ADD COLUMN IF NOT EXISTS "expiryDate" TIMESTAMP(3);`);
     steps.push('warehouse_items');
+
+    // Yangi ustunlar: sale_items.costPrice, dishes.costPrice
+    await prisma.$executeRawUnsafe(`ALTER TABLE "sale_items" ADD COLUMN IF NOT EXISTS "costPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "dishes" ADD COLUMN IF NOT EXISTS "costPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+    steps.push('new_columns_costprice');
 
     // Prisma migrations table
     await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "_prisma_migrations" ("id" VARCHAR(36) NOT NULL, "checksum" VARCHAR(64) NOT NULL, "finished_at" TIMESTAMPTZ, "migration_name" VARCHAR(255) NOT NULL, "logs" TEXT, "rolled_back_at" TIMESTAMPTZ, "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(), "applied_steps_count" INTEGER NOT NULL DEFAULT 0, CONSTRAINT "_prisma_migrations_pkey" PRIMARY KEY ("id"));`);
