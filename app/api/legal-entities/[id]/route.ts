@@ -17,9 +17,11 @@ export async function GET(
 
     const sales = await prisma.$queryRaw<{
       id: string; totalAmount: number; paymentType: string;
+      cashAmount: number | null; cardAmount: number | null;
       createdAt: Date; cashierName: string | null;
     }[]>`
       SELECT s.id, s."totalAmount", s."paymentType"::TEXT AS "paymentType",
+             s."cashAmount", s."cardAmount",
              s."createdAt", u.name AS "cashierName"
       FROM "sales" s
       LEFT JOIN "users" u ON u.id = s."cashierId"
@@ -28,7 +30,36 @@ export async function GET(
       LIMIT 20
     `;
 
-    return NextResponse.json({ ...rows[0], sales: sales.map(s => ({ ...s, totalAmount: Number(s.totalAmount) })) });
+    // sale_items ham olish
+    const saleIds = sales.map(s => s.id);
+    const saleItems = saleIds.length > 0
+      ? await prisma.$queryRaw<{
+          saleId: string; itemName: string; quantity: number; priceAtSale: number;
+        }[]>`
+          SELECT "saleId", "itemName", quantity, "priceAtSale"
+          FROM "sale_items"
+          WHERE "saleId" = ANY(${saleIds}::TEXT[])
+        `
+      : [];
+
+    const salesFormatted = sales.map(s => ({
+      id:          s.id,
+      totalAmount: Number(s.totalAmount),
+      paymentType: s.paymentType,
+      cashAmount:  s.cashAmount != null ? Number(s.cashAmount) : null,
+      cardAmount:  s.cardAmount != null ? Number(s.cardAmount) : null,
+      createdAt:   s.createdAt,
+      cashier:     { name: s.cashierName ?? 'Admin' },
+      saleItems:   saleItems
+        .filter(i => i.saleId === s.id)
+        .map(i => ({
+          itemName:    i.itemName,
+          quantity:    Number(i.quantity),
+          priceAtSale: Number(i.priceAtSale),
+        })),
+    }));
+
+    return NextResponse.json({ ...rows[0], sales: salesFormatted });
   } catch (error) {
     console.error('Legal entity GET error:', error);
     const msg = error instanceof Error ? error.message : 'Server xatosi';

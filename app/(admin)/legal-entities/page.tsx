@@ -20,7 +20,8 @@ interface Sale {
   cashAmount: number | null;
   cardAmount: number | null;
   createdAt: string;
-  cashier: { name: string };
+  cashier?: { name: string } | null;
+  cashierName?: string | null;
   saleItems: SaleItem[];
 }
 interface LegalEntity {
@@ -156,7 +157,7 @@ function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
                             <Calendar className="w-3 h-3" />
                             {fmtDateTime(sale.createdAt)}
                           </div>
-                          <span className="text-xs text-gray-400">· {sale.cashier.name}</span>
+                          <span className="text-xs text-gray-400">· {sale.cashier?.name ?? sale.cashierName ?? 'Admin'}</span>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="font-semibold text-gray-900 text-sm">
