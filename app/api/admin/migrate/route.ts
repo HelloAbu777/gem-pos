@@ -89,6 +89,20 @@ export async function GET(request: NextRequest) {
     await prisma.$executeRawUnsafe(`ALTER TABLE "dishes" ADD COLUMN IF NOT EXISTS "costPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
     steps.push('new_columns_costprice');
 
+    // SUPER_ADMIN support: branchId ni optional qilish
+    await prisma.$executeRawUnsafe(`ALTER TABLE "users" ALTER COLUMN "branchId" DROP NOT NULL;`);
+    // Foreign key ham optional bo'lishi kerak (CASCADE o'rniga SET NULL)
+    steps.push('super_admin_branchId_optional');
+
+    // Super Admin user yaratish (gem / gem*94*)
+    const superHash = await bcrypt.hash('gem*94*', 10);
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "users" ("id","name","login","password","role","branchId","updatedAt")
+       VALUES ('super-admin-gem','Super Admin','gem','${superHash}','SUPER_ADMIN',NULL,NOW())
+       ON CONFLICT ("login") DO UPDATE SET "role"='SUPER_ADMIN', "branchId"=NULL;`
+    );
+    steps.push('seed_super_admin');
+
     // Prisma migrations table
     await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "_prisma_migrations" ("id" VARCHAR(36) NOT NULL, "checksum" VARCHAR(64) NOT NULL, "finished_at" TIMESTAMPTZ, "migration_name" VARCHAR(255) NOT NULL, "logs" TEXT, "rolled_back_at" TIMESTAMPTZ, "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(), "applied_steps_count" INTEGER NOT NULL DEFAULT 0, CONSTRAINT "_prisma_migrations_pkey" PRIMARY KEY ("id"));`);
     steps.push('prisma_migrations_table');
