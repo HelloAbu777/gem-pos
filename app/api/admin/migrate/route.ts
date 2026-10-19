@@ -278,6 +278,21 @@ export async function GET(request: NextRequest) {
     await run('legal_entities branchId column', `
       ALTER TABLE "legal_entities" ADD COLUMN IF NOT EXISTS "branchId" TEXT NOT NULL DEFAULT 'default-branch'
     `);
+
+    // Mavjud ma'lumotlarni 'default-branch' ga tayinlash (NULL bo'lsa)
+    await run('categories backfill branchId', `
+      UPDATE "categories" SET "branchId" = 'default-branch' WHERE "branchId" IS NULL OR "branchId" = ''
+    `);
+    await run('suppliers backfill branchId', `
+      UPDATE "suppliers" SET "branchId" = 'default-branch' WHERE "branchId" IS NULL OR "branchId" = ''
+    `);
+    await run('legal_entities backfill branchId', `
+      UPDATE "legal_entities" SET "branchId" = 'default-branch' WHERE "branchId" IS NULL OR "branchId" = ''
+    `);
+    await run('dishes backfill branchId', `
+      UPDATE "dishes" SET "branchId" = 'default-branch' WHERE "branchId" IS NULL OR "branchId" = ''
+    `);
+
     // Eski unique constraint olib tashlanadi, yangi (name, branchId) unique qo'shiladi
     await run('categories drop old unique', `
       ALTER TABLE "categories" DROP CONSTRAINT IF EXISTS "categories_name_key"
