@@ -11,8 +11,8 @@ async function main() {
     where: { id: 'default-branch' },
     update: {},
     create: {
-      id: 'default-branch',
-      name: 'Asosiy filial',
+      id:      'default-branch',
+      name:    'Asosiy filial',
       address: 'Toshkent shahri',
     },
   })
@@ -21,32 +21,35 @@ async function main() {
   // 2. Oddiy admin (mavjud bo'lsa saqlanadi)
   const adminHash = await bcrypt.hash('admin123', 10)
   const admin = await prisma.user.upsert({
-    where: { login: 'admin' },
+    where:  { login: 'admin' },
     update: {},
     create: {
-      name: 'Administrator',
-      login: 'admin',
+      name:     'Administrator',
+      login:    'admin',
       password: adminHash,
-      role: 'ADMIN',
+      role:     'ADMIN',
       branchId: branch.id,
     },
   })
   console.log('✅ Admin:', admin.login)
 
-  // 3. Super Admin (login: gem, parol: gem*94*)
+  // 3. Super Admin — branchId=NULL, raw SQL ishlatiladi (Prisma type limitation)
   const superHash = await bcrypt.hash('gem*94*', 10)
-  const superAdmin = await prisma.user.upsert({
-    where: { login: 'gem' },
-    update: {},
-    create: {
-      name: 'Super Admin',
-      login: 'gem',
-      password: superHash,
-      role: 'SUPER_ADMIN',
-      branchId: null, // Super Admin biror filiallga bog'liq emas
-    },
-  })
-  console.log('✅ Super Admin:', superAdmin.login, '(parol: gem*94*)')
+  await prisma.$executeRaw`
+    INSERT INTO "users" ("id", "name", "login", "password", "role", "branchId", "updatedAt")
+    VALUES (
+      'super-admin-gem',
+      'Super Admin',
+      'gem',
+      ${superHash},
+      'SUPER_ADMIN',
+      NULL,
+      NOW()
+    )
+    ON CONFLICT ("login") DO UPDATE
+      SET "role" = 'SUPER_ADMIN', "branchId" = NULL, "updatedAt" = NOW()
+  `
+  console.log('✅ Super Admin yaratildi (login: gem, parol: gem*94*)')
 
   console.log('🎉 Seeding tugadi!')
 }

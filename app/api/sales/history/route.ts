@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
     const limit  = parseInt(searchParams.get('limit')  || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const where = { branchId: session.branchId };
+    // null bo'lsa (SUPER_ADMIN) — barcha filiallar, aks holda faqat o'z filiali
+    const where = session.branchId ? { branchId: session.branchId } : {};
 
     const [sales, total] = await Promise.all([
       prisma.sale.findMany({

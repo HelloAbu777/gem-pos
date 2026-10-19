@@ -2,68 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth/session';
 
-// GET - Barcode orqali mahsulot qidirish (Real Database)
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ barcode: string }> }
 ) {
   try {
-    // Session tekshiruvi
     const session = await getSession();
     if (!session) {
-      return NextResponse.json(
-        { error: 'Avtorizatsiya talab qilinadi' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Avtorizatsiya talab qilinadi' }, { status: 401 });
     }
 
-    const params = await context.params;
+    const params  = await context.params;
     const barcode = params.barcode;
 
-    console.log('🔍 Barcode qidiruv boshlandi:', barcode); // DEBUG
-    console.log('👤 Session branchId:', session.branchId); // DEBUG
-
     if (!barcode || barcode.trim() === '') {
-      return NextResponse.json(
-        { error: 'Shtrix kod kiritilmagan' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Shtrix kod kiritilmagan' }, { status: 400 });
     }
 
-    // Database dan qidirish - BARCHA KATEGORIYALARDAN
+    // branchId null bo'lsa (SUPER_ADMIN) — barcha filiallardan qidirish
+    const branchFilter = session.branchId ? { branchId: session.branchId } : {};
+
     const product = await prisma.product.findFirst({
-      where: { 
+      where: {
         barcode: barcode.trim(),
-        branchId: session.branchId, // Faqat o'z filialining mahsulotlari
-        // Hech qanday category filter yo'q - BARCHA kategoriyalar qidiriladi
+        ...branchFilter,
       },
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        supplier: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        category: { select: { id: true, name: true } },
+        supplier: { select: { id: true, name: true } },
       },
     });
-
-    console.log('📦 Database natija:', product ? `Topildi: ${product.name}` : 'Topilmadi'); // DEBUG
-    if (product) {
-      console.log('📊 Mahsulot tafsiloti:', {
-        id: product.id,
-        name: product.name,
-        barcode: product.barcode,
-        category: product.category.name,
-        quantity: product.quantity,
-        salePrice: product.salePrice
-      }); // DEBUG
-    }
 
     if (!product) {
       return NextResponse.json(
@@ -72,33 +40,25 @@ export async function GET(
       );
     }
 
-    // Zaxira tekshiruvi
     if (product.quantity <= 0) {
       return NextResponse.json(
-        { 
-          error: 'Mahsulot zaxirada yo\'q',
-          product: {
-            ...product,
-            quantity: 0,
-          },
-        },
+        { error: 'Mahsulot zaxirada yo\'q', product: { ...product, quantity: 0 } },
         { status: 400 }
       );
     }
 
-    // Success - mahsulot topildi va zaxirada bor
     return NextResponse.json({
-      id: product.id,
-      name: product.name,
-      barcode: product.barcode,
-      salePrice: product.salePrice,
+      id:            product.id,
+      name:          product.name,
+      barcode:       product.barcode,
+      salePrice:     product.salePrice,
       purchasePrice: product.purchasePrice,
-      quantity: product.quantity,
-      minQuantity: product.minQuantity,
-      unit: product.unit,
-      category: product.category,
-      supplier: product.supplier,
-      expiryDate: product.expiryDate,
+      quantity:      product.quantity,
+      minQuantity:   product.minQuantity,
+      unit:          product.unit,
+      category:      product.category,
+      supplier:      product.supplier,
+      expiryDate:    product.expiryDate,
     });
 
   } catch (error) {
