@@ -27,8 +27,10 @@ export async function GET(request: NextRequest) {
     const today = new Date().toISOString().split('T')[0];
     const start = new Date(from || today);
     const end   = new Date(to   || today);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
+    // Smena: 08:00 → ertangi kun 07:59
+    start.setHours(8, 0, 0, 0);
+    end.setDate(end.getDate() + 1);
+    end.setHours(7, 59, 59, 999);
 
     // Filter qurish
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

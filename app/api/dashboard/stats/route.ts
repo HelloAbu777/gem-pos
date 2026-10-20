@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth/session';
 
+const SHIFT_HOUR = 8; // Smena boshlanish soati
+
+function parseShiftRange(startDate: string, endDate: string) {
+  // startDate kuni 08:00 dan endDate + 1 kun 07:59 gacha
+  // Lekin agar startDate === endDate (bir kun), shift logikasi qo'llanadi
+  const start = new Date(startDate);
+  start.setHours(SHIFT_HOUR, 0, 0, 0);
+
+  const end = new Date(endDate);
+  // Agar bir kunlik so'rov — smena: bugun 08:00 → ertaga 07:59
+  end.setDate(end.getDate() + 1);
+  end.setHours(SHIFT_HOUR - 1, 59, 59, 999);
+
+  return { start, end };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -15,8 +31,8 @@ export async function GET(request: NextRequest) {
     const session  = await getSession();
     const branchId = session?.branchId ?? null;
 
-    const start = new Date(startDate); start.setHours(0, 0, 0, 0);
-    const end   = new Date(endDate);   end.setHours(23, 59, 59, 999);
+    // Smena: 08:00 → ertangi kun 07:59
+    const { start, end } = parseShiftRange(startDate, endDate);
 
     const daysDiff  = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
     const prevStart = new Date(start); prevStart.setDate(prevStart.getDate() - daysDiff);

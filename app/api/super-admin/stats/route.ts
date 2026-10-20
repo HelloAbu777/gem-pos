@@ -20,9 +20,10 @@ export async function GET(request: NextRequest) {
     }
 
     const start = new Date(startDate);
-    const end   = new Date(endDate);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
+    start.setHours(8, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 1);
+    end.setHours(7, 59, 59, 999);
 
     // Branch filter
     const branchFilter = branchId !== 'all' ? { branchId } : {};

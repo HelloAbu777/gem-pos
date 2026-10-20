@@ -48,13 +48,25 @@ const Loader = () => (
 /* ── Helpers ── */
 function fmt(n: number) { return new Intl.NumberFormat('uz-UZ').format(Math.round(n)); }
 
+const SHIFT_HOUR = 8;
+
+/**
+ * Smena: 08:00 → ertangi kun 07:59
+ * Agar hozir 00:00–07:59 — "bugun" smena aslida kecha boshlangan
+ */
 function getDates(range: DateRange) {
-  const now   = new Date();
-  const today = now.toISOString().split('T')[0];
-  const yest  = new Date(now); yest.setDate(yest.getDate() - 1);
-  return range === 'today'
-    ? { startDate: today,                       endDate: today }
-    : { startDate: yest.toISOString().split('T')[0], endDate: yest.toISOString().split('T')[0] };
+  const now = new Date();
+  const isBeforeShift = now.getHours() < SHIFT_HOUR;
+
+  // Joriy smena boshlanish kuni
+  const base = new Date(now);
+  if (isBeforeShift) base.setDate(base.getDate() - 1);
+
+  if (range === 'yesterday') base.setDate(base.getDate() - 1);
+
+  const startDate = base.toISOString().split('T')[0];
+  // endDate = startDate (API shift logikasini o'zi qo'llaydi)
+  return { startDate, endDate: startDate };
 }
 
 export default function DashboardPage() {
