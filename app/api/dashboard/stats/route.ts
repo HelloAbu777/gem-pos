@@ -100,13 +100,16 @@ export async function GET(request: NextRequest) {
     const leSales     = allSales.filter(s => s.saleType === 'LEGAL_ENTITY' || s.legalEntityId);
 
     const totalRevenue = retailSales.reduce((s, x) => s + Number(x.totalAmount), 0);
-    const totalCash    = retailSales.reduce((s, x) => {
-      if (x.paymentType === 'CASH')  return s + Number(x.cashAmount ?? x.totalAmount);
+
+    // FIX: MIXED to'lovlarda cashAmount/cardAmount null bo'lishi mumkin
+    // Agar null bo'lsa totalAmount dan hisoblash o'rniga 0 ishlatamiz
+    const totalCash = retailSales.reduce((s, x) => {
+      if (x.paymentType === 'CASH')  return s + Number(x.totalAmount);
       if (x.paymentType === 'MIXED') return s + Number(x.cashAmount ?? 0);
       return s;
     }, 0);
     const totalCard = retailSales.reduce((s, x) => {
-      if (x.paymentType === 'CARD')  return s + Number(x.cardAmount ?? x.totalAmount);
+      if (x.paymentType === 'CARD')  return s + Number(x.totalAmount);
       if (x.paymentType === 'MIXED') return s + Number(x.cardAmount ?? 0);
       return s;
     }, 0);

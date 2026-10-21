@@ -23,8 +23,10 @@ type SaveForm = {
   name: string; barcode: string; unit: string; quantity: string;
   minQuantity: string; purchasePrice: string; salePrice: string;
   vatType: string; expiryDate: string; categoryId: string; supplierId: string;
+  isPinned: boolean;
 };
-const fmt     = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+// Barcha joylarda bir xil format: space separator, minglik ajratuvchi
+const fmt     = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n));
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
 const VAT_LABELS: Record<string, string> = { NO_VAT: 'Soliqsiz', STANDARD: 'Standart', ZERO_VAT: '0%' };
 const inp = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-gray-900 outline-none";
@@ -298,6 +300,7 @@ const ProductModal = memo(function ProductModal({ open, onClose, onSave, initial
   const [categoryId,    setCategoryId]    = useState('');
   const [supplierId,    setSupplierId]    = useState('');
   const [expiryDate,    setExpiryDate]    = useState('');
+  const [isPinned,      setIsPinned]      = useState(false); // FIX: isPinned qo'shildi
   const [saving,        setSaving]        = useState(false);
   const [error,         setError]         = useState('');
   const nameRef = useRef<HTMLInputElement>(null);
@@ -317,24 +320,27 @@ const ProductModal = memo(function ProductModal({ open, onClose, onSave, initial
       setCategoryId(initial.category.id);
       setSupplierId(initial.supplier.id);
       setExpiryDate(initial.expiryDate ? initial.expiryDate.split('T')[0] : '');
+      setIsPinned(initial.isPinned ?? false); // FIX: isPinned saqlanadi
     } else {
       setName(''); setBarcode(''); setPurchasePrice(''); setSalePrice('');
       setQuantity('0'); setMinQuantity('10'); setUnit('dona');
       setVatType('NO_VAT'); setCategoryId(''); setSupplierId(''); setExpiryDate('');
+      setIsPinned(false);
     }
     setTimeout(() => nameRef.current?.focus(), 60);
   }, [open, initial]);
 
   const handleSave = async () => {
     setError('');
-    if (!name.trim())    { setError('Nom kiritilmagan'); return; }
-    if (!purchasePrice)  { setError('Kelish narxi kiritilmagan'); return; }
-    if (!salePrice)      { setError('Sotish narxi kiritilmagan'); return; }
-    if (!categoryId)     { setError('Kategoriya tanlanmagan'); return; }
-    if (!supplierId)     { setError("Ta'minotchi tanlanmagan"); return; }
+    if (!name.trim())                          { setError('Nom kiritilmagan'); return; }
+    // FIX: bo'sh string tekshiruvi — 0 narxga ruxsat beriladi
+    if (purchasePrice === '' || purchasePrice === undefined) { setError('Kelish narxi kiritilmagan'); return; }
+    if (salePrice === ''     || salePrice === undefined)     { setError('Sotish narxi kiritilmagan'); return; }
+    if (!categoryId)                           { setError('Kategoriya tanlanmagan'); return; }
+    if (!supplierId)                           { setError("Ta'minotchi tanlanmagan"); return; }
     setSaving(true);
     try {
-      await onSave({ name, barcode, purchasePrice, salePrice, quantity, minQuantity, unit, vatType, categoryId, supplierId, expiryDate });
+      await onSave({ name, barcode, purchasePrice, salePrice, quantity, minQuantity, unit, vatType, categoryId, supplierId, expiryDate, isPinned });
       onClose();
     } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Xatolik'); }
     finally { setSaving(false); }

@@ -14,7 +14,7 @@ interface Dish {
   createdAt: string;
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+const fmt = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n));
 
 /* ── Modal ── */
 function DishModal({

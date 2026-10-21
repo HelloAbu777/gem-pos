@@ -25,7 +25,7 @@ interface TopItem  { name: string; qty: number; revenue: number }
 interface LowItem  { id: string; name: string; quantity: number; minQuantity: number; unit: string }
 interface ExpItem  { id: string; name: string; expiryDate: string; quantity: number; unit: string; daysLeft: number }
 
-const fmt     = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+const fmt     = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n));
 const fmtDate = (s: string | null | undefined) =>
   s ? new Date(s).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 

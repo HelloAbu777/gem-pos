@@ -46,7 +46,7 @@ const Loader = () => (
 );
 
 /* ── Helpers ── */
-function fmt(n: number) { return new Intl.NumberFormat('uz-UZ').format(Math.round(n)); }
+function fmt(n: number) { return new Intl.NumberFormat('ru-RU').format(Math.round(n)); }
 
 const SHIFT_HOUR = 8;
 

@@ -49,7 +49,8 @@ interface MonthlyData {
 /* ════════════════════════════════════════
    HELPERS
 ════════════════════════════════════════ */
-const fmt    = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+// FIX: 'ru-RU' ishlatiladi — barcha brauzerlarda bir xil bo'sh joy separator beradi
+const fmt    = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n));
 const fmtDay = (s: string) => new Date(s).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'short' });
 
 const OY_NOMLARI = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];

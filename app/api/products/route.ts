@@ -74,8 +74,11 @@ export async function POST(request: NextRequest) {
     if (!data.name?.trim())  return NextResponse.json({ error: 'Nom kiritilmagan' },          { status: 400 });
     if (!data.categoryId)    return NextResponse.json({ error: 'Kategoriya tanlanmagan' },     { status: 400 });
     if (!data.supplierId)    return NextResponse.json({ error: "Ta'minotchi tanlanmagan" },    { status: 400 });
-    if (!data.salePrice)     return NextResponse.json({ error: 'Sotish narxi kiritilmagan' },  { status: 400 });
-    if (!data.purchasePrice) return NextResponse.json({ error: 'Kelish narxi kiritilmagan' },  { status: 400 });
+    // FIX: bo'sh string tekshiruvi — 0 narxga ruxsat beriladi
+    if (data.salePrice === '' || data.salePrice == null)
+      return NextResponse.json({ error: 'Sotish narxi kiritilmagan' },  { status: 400 });
+    if (data.purchasePrice === '' || data.purchasePrice == null)
+      return NextResponse.json({ error: 'Kelish narxi kiritilmagan' },  { status: 400 });
 
     // Barcode tekshirish
     if (data.barcode?.trim()) {
@@ -94,7 +97,8 @@ export async function POST(request: NextRequest) {
 
     let expiryDate: string | null = null;
     if (data.expiryDate) {
-      const d = new Date(data.expiryDate);
+      // FIX: T12:00:00 qo'shamiz — UTC offset dan himoya (bir kun orqaga siljishini oldini oladi)
+      const d = new Date(`${data.expiryDate}T12:00:00`);
       if (!isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
         expiryDate = d.toISOString();
       }

@@ -11,7 +11,7 @@ interface Props {
   price:   number;
 }
 
-const fmt = (n: number) => new Intl.NumberFormat('uz-UZ').format(Math.round(n));
+const fmt = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n));
 
 /* ─────────────────────────────────────────────────────────────
    CODE128-B encoder — CDN talab qilmaydi

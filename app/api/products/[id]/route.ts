@@ -10,56 +10,95 @@ export async function PUT(
     const { id } = await context.params;
     const data    = await request.json();
 
-    if (!data.name?.trim())  return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
-    if (!data.salePrice)     return NextResponse.json({ error: 'Sotish narxi kiritilmagan' }, { status: 400 });
-    if (!data.purchasePrice) return NextResponse.json({ error: 'Kelish narxi kiritilmagan' }, { status: 400 });
+    // FIX: To'g'ri validatsiya — bo'sh string yoki null tekshirish
+    if (!data.name?.trim())
+      return NextResponse.json({ error: 'Nom kiritilmagan' }, { status: 400 });
+    if (data.salePrice === '' || data.salePrice == null)
+      return NextResponse.json({ error: 'Sotish narxi kiritilmagan' }, { status: 400 });
+    if (data.purchasePrice === '' || data.purchasePrice == null)
+      return NextResponse.json({ error: 'Kelish narxi kiritilmagan' }, { status: 400 });
+    if (!data.categoryId)
+      return NextResponse.json({ error: 'Kategoriya tanlanmagan' }, { status: 400 });
+    if (!data.supplierId)
+      return NextResponse.json({ error: "Ta'minotchi tanlanmagan" }, { status: 400 });
 
+    // Barcode unique tekshirish
     if (data.barcode?.trim()) {
       const ex = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "products" WHERE barcode = ${data.barcode.trim()} AND id != ${id} LIMIT 1
+        SELECT id FROM "products"
+        WHERE barcode = ${data.barcode.trim()} AND id != ${id}
+        LIMIT 1
       `;
-      if (ex.length > 0) return NextResponse.json({ error: 'Bu barcode allaqachon mavjud' }, { status: 400 });
+      if (ex.length > 0)
+        return NextResponse.json({ error: 'Bu barcode allaqachon mavjud' }, { status: 400 });
     }
 
     const margin = Number(data.salePrice) - Number(data.purchasePrice);
 
+    // ExpiryDate — UTC offset muammosidan himoya: sana + T12:00:00 qo'shamiz
     let expiryDate: Date | null = null;
     if (data.expiryDate) {
-      const d = new Date(data.expiryDate);
+      const d = new Date(`${data.expiryDate}T12:00:00`);
       if (!isNaN(d.getTime()) && d.getFullYear() >= 1900 && d.getFullYear() <= 2100) {
         expiryDate = d;
       }
     }
 
+    // FIX: isPinned frontend dan keladi, yo'q bo'lsa mavjud qiymat saqlanadi
+    const isPinnedValue = data.isPinned === true || data.isPinned === 'true';
+
     await prisma.$executeRaw`
       UPDATE "products" SET
-        name          = ${data.name.trim()},
-        barcode       = ${data.barcode?.trim() || null},
-        unit          = ${data.unit || 'dona'},
-        quantity      = ${Number(data.quantity) || 0},
-        "minQuantity" = ${Number(data.minQuantity) || 10},
+        name            = ${data.name.trim()},
+        barcode         = ${data.barcode?.trim() || null},
+        unit            = ${data.unit || 'dona'},
+        quantity        = ${Number(data.quantity) || 0},
+        "minQuantity"   = ${Number(data.minQuantity) || 10},
         "purchasePrice" = ${Number(data.purchasePrice)},
-        "salePrice"   = ${Number(data.salePrice)},
-        margin        = ${margin},
-        "vatType"     = ${data.vatType || 'NO_VAT'},
-        "expiryDate"  = ${expiryDate},
-        "isPinned"    = ${data.isPinned === true},
-        "categoryId"  = ${data.categoryId},
-        "supplierId"  = ${data.supplierId},
-        "updatedAt"   = NOW()
+        "salePrice"     = ${Number(data.salePrice)},
+        margin          = ${margin},
+        "vatType"       = ${data.vatType || 'NO_VAT'},
+        "expiryDate"    = ${expiryDate},
+        "isPinned"      = ${isPinnedValue},
+        "categoryId"    = ${data.categoryId},
+        "supplierId"    = ${data.supplierId},
+        "updatedAt"     = NOW()
       WHERE id = ${id}
     `;
 
-    const updated = await prisma.$queryRaw<object[]>`
-      SELECT p.*, p."vatType"::TEXT AS "vatType",
-             c.name AS "categoryName", s.name AS "supplierName", s.phone AS "supplierPhone"
+    const updated = await prisma.$queryRaw<{
+      id: string; name: string; barcode: string | null;
+      unit: string; quantity: number; minQuantity: number;
+      purchasePrice: number; salePrice: number; margin: number;
+      vatType: string; expiryDate: Date | null; isPinned: boolean;
+      branchId: string; categoryId: string; supplierId: string;
+      categoryName: string; supplierName: string; supplierPhone: string;
+    }[]>`
+      SELECT p.id, p.name, p.barcode, p.unit, p.quantity, p."minQuantity",
+             p."purchasePrice", p."salePrice", p.margin,
+             p."vatType"::TEXT AS "vatType",
+             p."expiryDate", p."isPinned", p."branchId",
+             p."categoryId", c.name AS "categoryName",
+             p."supplierId", s.name AS "supplierName", s.phone AS "supplierPhone"
       FROM "products" p
       LEFT JOIN "categories" c ON c.id = p."categoryId"
       LEFT JOIN "suppliers"  s ON s.id = p."supplierId"
       WHERE p.id = ${id}
     `;
 
-    return NextResponse.json(updated[0]);
+    if (updated.length === 0)
+      return NextResponse.json({ error: 'Mahsulot topilmadi' }, { status: 404 });
+
+    const p = updated[0];
+    return NextResponse.json({
+      id: p.id, name: p.name, barcode: p.barcode,
+      unit: p.unit, quantity: Number(p.quantity), minQuantity: Number(p.minQuantity),
+      purchasePrice: Number(p.purchasePrice), salePrice: Number(p.salePrice),
+      margin: Number(p.margin), vatType: p.vatType,
+      expiryDate: p.expiryDate, isPinned: p.isPinned, branchId: p.branchId,
+      category: { id: p.categoryId, name: p.categoryName },
+      supplier: { id: p.supplierId, name: p.supplierName, phone: p.supplierPhone },
+    });
   } catch (error) {
     console.error('Product PUT error:', error);
     const msg = error instanceof Error ? error.message : 'Server xatosi';
@@ -73,10 +112,12 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id }      = await context.params;
+    const { id }       = await context.params;
     const { isPinned } = await request.json();
     await prisma.$executeRaw`
-      UPDATE "products" SET "isPinned" = ${Boolean(isPinned)}, "updatedAt" = NOW() WHERE id = ${id}
+      UPDATE "products"
+      SET "isPinned" = ${Boolean(isPinned)}, "updatedAt" = NOW()
+      WHERE id = ${id}
     `;
     return NextResponse.json({ id, isPinned: Boolean(isPinned) });
   } catch (error) {
