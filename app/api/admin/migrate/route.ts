@@ -268,6 +268,14 @@ export async function GET(request: NextRequest) {
         SET "role"='SUPER_ADMIN', "branchId"=NULL, "updatedAt"=NOW()
     `);
 
+    // ── ENUM USTUNLARINI TEXT GA O'TKAZISH ──────────────────────
+    await run('products vatType to TEXT', `
+      ALTER TABLE "products" ALTER COLUMN "vatType" TYPE TEXT USING "vatType"::TEXT
+    `);
+    await run('products role column (users) to TEXT', `
+      ALTER TABLE "users" ALTER COLUMN "role" TYPE TEXT USING "role"::TEXT
+    `);
+
     // ── 13. CATEGORIES / SUPPLIERS / LEGAL_ENTITIES — branchId ──
     await run('categories branchId column', `
       ALTER TABLE "categories" ADD COLUMN IF NOT EXISTS "branchId" TEXT NOT NULL DEFAULT 'default-branch'

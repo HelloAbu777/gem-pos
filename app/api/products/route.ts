@@ -106,32 +106,35 @@ export async function POST(request: NextRequest) {
 
     const margin = Number(data.salePrice) - Number(data.purchasePrice);
     const id = `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const vatType     = data.vatType || 'NO_VAT';
+    const unit        = data.unit || 'dona';
+    const barcodeVal  = data.barcode?.trim() || null;
+    const qtyVal      = Number(data.quantity) || 0;
+    const minQtyVal   = Number(data.minQuantity) || 10;
+    const purchaseVal = Number(data.purchasePrice);
+    const saleVal     = Number(data.salePrice);
+    const pinnedVal   = data.isPinned === true;
 
-    await prisma.$executeRaw`
+    // $executeRawUnsafe — vatType enum cast uchun
+    await prisma.$executeRawUnsafe(`
       INSERT INTO "products" (
         "id","name","barcode","unit","quantity","minQuantity",
         "purchasePrice","salePrice","margin","vatType",
         "expiryDate","isPinned","categoryId","supplierId","branchId",
         "createdAt","updatedAt"
       ) VALUES (
-        ${id},
-        ${data.name.trim()},
-        ${data.barcode?.trim() || null},
-        ${data.unit || 'dona'},
-        ${Number(data.quantity) || 0},
-        ${Number(data.minQuantity) || 10},
-        ${Number(data.purchasePrice)},
-        ${Number(data.salePrice)},
-        ${margin},
-        ${data.vatType || 'NO_VAT'},
-        ${expiryDate ? new Date(expiryDate) : null},
-        ${data.isPinned === true},
-        ${data.categoryId},
-        ${data.supplierId},
-        ${branchId},
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        $10::"VATType",
+        $11, $12, $13, $14, $15,
         NOW(), NOW()
       )
-    `;
+    `,
+      id, data.name.trim(), barcodeVal, unit,
+      qtyVal, minQtyVal, purchaseVal, saleVal, margin,
+      vatType,
+      expiryDate ? new Date(expiryDate) : null,
+      pinnedVal, data.categoryId, data.supplierId, branchId
+    );
 
     const created = await prisma.$queryRaw<{ id: string; name: string }[]>`
       SELECT p.id, p.name, p.barcode, p.unit, p.quantity, p."minQuantity",

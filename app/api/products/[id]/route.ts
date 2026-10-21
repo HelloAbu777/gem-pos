@@ -46,25 +46,41 @@ export async function PUT(
 
     // FIX: isPinned frontend dan keladi, yo'q bo'lsa mavjud qiymat saqlanadi
     const isPinnedValue = data.isPinned === true || data.isPinned === 'true';
+    const vatTypeVal    = data.vatType || 'NO_VAT';
 
-    await prisma.$executeRaw`
+    await prisma.$executeRawUnsafe(`
       UPDATE "products" SET
-        name            = ${data.name.trim()},
-        barcode         = ${data.barcode?.trim() || null},
-        unit            = ${data.unit || 'dona'},
-        quantity        = ${Number(data.quantity) || 0},
-        "minQuantity"   = ${Number(data.minQuantity) || 10},
-        "purchasePrice" = ${Number(data.purchasePrice)},
-        "salePrice"     = ${Number(data.salePrice)},
-        margin          = ${margin},
-        "vatType"       = ${data.vatType || 'NO_VAT'},
-        "expiryDate"    = ${expiryDate},
-        "isPinned"      = ${isPinnedValue},
-        "categoryId"    = ${data.categoryId},
-        "supplierId"    = ${data.supplierId},
+        name            = $1,
+        barcode         = $2,
+        unit            = $3,
+        quantity        = $4,
+        "minQuantity"   = $5,
+        "purchasePrice" = $6,
+        "salePrice"     = $7,
+        margin          = $8,
+        "vatType"       = $9::"VATType",
+        "expiryDate"    = $10,
+        "isPinned"      = $11,
+        "categoryId"    = $12,
+        "supplierId"    = $13,
         "updatedAt"     = NOW()
-      WHERE id = ${id}
-    `;
+      WHERE id = $14
+    `,
+      data.name.trim(),
+      data.barcode?.trim() || null,
+      data.unit || 'dona',
+      Number(data.quantity) || 0,
+      Number(data.minQuantity) || 10,
+      Number(data.purchasePrice),
+      Number(data.salePrice),
+      margin,
+      vatTypeVal,
+      expiryDate,
+      isPinnedValue,
+      data.categoryId,
+      data.supplierId,
+      id
+    );
 
     const updated = await prisma.$queryRaw<{
       id: string; name: string; barcode: string | null;
