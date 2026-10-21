@@ -73,15 +73,15 @@ model Product {
   id             String      @id @default(cuid())
   name           String
   barcode        String?     @unique
-  unit           String      @default("dona") // dona, kg, litr, etc.
+  unit           String      @default("dona")
   quantity       Float       @default(0)
-  minQuantity    Float       @default(10) // Minimal zaxira
-  purchasePrice  Float       // Sotib olish narxi
-  salePrice      Float       // Sotish narxi
-  margin         Float       // Marja (avtomatik hisoblanadi)
-  vatType        String      @default("NO_VAT") // STANDARD | NO_VAT | ZERO_VAT
-  expiryDate     DateTime?   // Yaroqlilik muddati
-  isPinned       Boolean     @default(false) // Kassa boshida ko'rsatish
+  minQuantity    Float       @default(10)
+  purchasePrice  Float
+  salePrice      Float
+  margin         Float
+  vatType        String      @default("NO_VAT")
+  expiryDate     DateTime?
+  isPinned       Boolean     @default(false)
   categoryId     String
   category       Category    @relation(fields: [categoryId], references: [id])
   supplierId     String
@@ -92,6 +92,9 @@ model Product {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  @@index([branchId])
+  @@index([branchId, isPinned])
+  @@index([barcode])
   @@map("products")
 }
 
@@ -99,10 +102,10 @@ model Product {
 model Sale {
   id              String        @id @default(cuid())
   totalAmount     Float
-  paymentType     String        // CASH | CARD | MIXED
+  paymentType     String
   cashAmount      Float?
   cardAmount      Float?
-  saleType        String        @default("RETAIL") // RETAIL | LEGAL_ENTITY
+  saleType        String        @default("RETAIL")
   cashierId       String
   cashier         User          @relation(fields: [cashierId], references: [id])
   branchId        String
@@ -112,6 +115,9 @@ model Sale {
   saleItems       SaleItem[]
   createdAt       DateTime      @default(now())
 
+  @@index([branchId])
+  @@index([branchId, createdAt(sort: Desc)])
+  @@index([legalEntityId])
   @@map("sales")
 }
 
@@ -122,10 +128,12 @@ model SaleItem {
   sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   productId   String?
   product     Product? @relation(fields: [productId], references: [id])
-  itemName    String   // mahsulot yoki taom nomi (snapshot)
+  itemName    String
   quantity    Float
   priceAtSale Float
 
+  @@index([saleId])
+  @@index([productId])
   @@map("sale_items")
 }
 

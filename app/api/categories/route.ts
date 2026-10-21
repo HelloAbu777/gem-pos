@@ -9,17 +9,15 @@ export async function GET() {
     const session  = await getSession();
     const branchId = session?.branchId ?? DEFAULT_BRANCH_ID;
 
+    // FIX: COUNT(products) olib tashlandi — POS faqat id/name kerak, JOIN+GROUP BY sekin
     const categories = await prisma.$queryRaw<{
       id: string; name: string; branchId: string;
-      createdAt: Date; updatedAt: Date; productCount: bigint;
+      createdAt: Date; updatedAt: Date;
     }[]>`
-      SELECT c.id, c.name, c."branchId", c."createdAt", c."updatedAt",
-             COUNT(p.id) AS "productCount"
-      FROM "categories" c
-      LEFT JOIN "products" p ON p."categoryId" = c.id
-      WHERE c."branchId" = ${branchId}
-      GROUP BY c.id
-      ORDER BY c.name ASC
+      SELECT id, name, "branchId", "createdAt", "updatedAt"
+      FROM "categories"
+      WHERE "branchId" = ${branchId}
+      ORDER BY name ASC
     `;
 
     return NextResponse.json(
@@ -29,7 +27,7 @@ export async function GET() {
         branchId:  c.branchId,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
-        _count:    { products: Number(c.productCount) },
+        _count:    { products: 0 },
       }))
     );
   } catch (error) {

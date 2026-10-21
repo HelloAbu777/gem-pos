@@ -9,19 +9,16 @@ export async function GET() {
     const session  = await getSession();
     const branchId = session?.branchId ?? DEFAULT_BRANCH_ID;
 
+    // FIX: Agregatsiya (SUM/COUNT over sales) faqat admin sahifasida kerak.
+    // POS va asosiy ro'yxat uchun — oddiy SELECT, tez
     const entities = await prisma.$queryRaw<{
       id: string; name: string; phone: string;
       branchId: string; createdAt: Date;
-      salesCount: bigint; totalAmount: number | null;
     }[]>`
-      SELECT le.id, le.name, le.phone, le."branchId", le."createdAt",
-             COUNT(s.id)         AS "salesCount",
-             SUM(s."totalAmount") AS "totalAmount"
-      FROM "legal_entities" le
-      LEFT JOIN "sales" s ON s."legalEntityId" = le.id
-      WHERE le."branchId" = ${branchId}
-      GROUP BY le.id
-      ORDER BY le.name ASC
+      SELECT id, name, phone, "branchId", "createdAt"
+      FROM "legal_entities"
+      WHERE "branchId" = ${branchId}
+      ORDER BY name ASC
     `;
 
     return NextResponse.json(
@@ -31,8 +28,8 @@ export async function GET() {
         phone:       e.phone,
         branchId:    e.branchId,
         createdAt:   e.createdAt,
-        salesCount:  Number(e.salesCount),
-        totalAmount: Number(e.totalAmount ?? 0),
+        salesCount:  0,
+        totalAmount: 0,
       }))
     );
   } catch (error) {

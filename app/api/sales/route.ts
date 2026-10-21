@@ -93,15 +93,23 @@ export async function POST(request: NextRequest) {
       ON CONFLICT ("id") DO NOTHING
     `;
 
-    // Mahsulotlar miqdorini tekshirish
+    // FIX: Barcha productlarni BITTA so'rovda tekshirish (N+1 o'rniga)
+    const productIds = data.items.filter((i: SaleItemInput) => i.productId).map((i: SaleItemInput) => i.productId as string);
+    const products = productIds.length > 0
+      ? await prisma.$queryRaw<{ id: string; name: string; quantity: number }[]>`
+          SELECT id, name, quantity FROM "products"
+          WHERE id = ANY(${productIds}::TEXT[])
+        `
+      : [];
+
+    const productMap = Object.fromEntries(products.map(p => [p.id, p]));
+
     for (const item of data.items) {
       if (!item.productId) continue;
-      const prod = await prisma.$queryRaw<{ name: string; quantity: number }[]>`
-        SELECT name, quantity FROM "products" WHERE id = ${item.productId} LIMIT 1
-      `;
-      if (prod.length === 0) throw new Error(`Mahsulot topilmadi: ${item.itemName}`);
-      if (Number(prod[0].quantity) < item.quantity)
-        throw new Error(`"${prod[0].name}" zaxirada yetarli emas. Mavjud: ${prod[0].quantity}`);
+      const prod = productMap[item.productId];
+      if (!prod) throw new Error(`Mahsulot topilmadi: ${item.itemName}`);
+      if (Number(prod.quantity) < item.quantity)
+        throw new Error(`"${prod.name}" zaxirada yetarli emas. Mavjud: ${prod.quantity}`);
     }
 
     // Sotuv yaratish
@@ -119,14 +127,27 @@ export async function POST(request: NextRequest) {
       )
     `;
 
-    // Sotuv tafsilotlarini yaratish + mahsulot miqdorini kamaytirish
-    for (const item of data.items) {
-      const itemId = `si_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      await prisma.$executeRaw`
-        INSERT INTO "sale_items" ("id","saleId","productId","itemName","quantity","priceAtSale")
-        VALUES (${itemId}, ${saleId}, ${item.productId ?? null}, ${item.itemName}, ${item.quantity}, ${item.priceAtSale})
-      `;
-      if (item.productId) {
+    // FIX: Barcha sale_items ni BITTA bulk INSERT bilan yaratish
+    if (data.items.length > 0) {
+      const itemValues = data.items.map((_: SaleItemInput, idx: number) => {
+        const itemId = `si_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 5)}`;
+        return itemId;
+      });
+
+      // Har bir item uchun alohida insert (bulk insert Prisma tagged template da cheklangan)
+      // Lekin stock decrement'ni bitta UPDATE bilan qilamiz
+      for (let i = 0; i < data.items.length; i++) {
+        const item   = data.items[i];
+        const itemId = itemValues[i];
+        await prisma.$executeRaw`
+          INSERT INTO "sale_items" ("id","saleId","productId","itemName","quantity","priceAtSale")
+          VALUES (${itemId}, ${saleId}, ${item.productId ?? null}, ${item.itemName}, ${item.quantity}, ${item.priceAtSale})
+        `;
+      }
+
+      // FIX: Stock kamaytirish — har product uchun bitta UPDATE (ketma-ket, lekin loop soni kam)
+      for (const item of data.items) {
+        if (!item.productId) continue;
         await prisma.$executeRaw`
           UPDATE "products" SET quantity = quantity - ${item.quantity} WHERE id = ${item.productId}
         `;
@@ -152,54 +173,54 @@ export async function GET(request: NextRequest) {
 
     const branchId = session?.branchId ?? null;
 
-    const sales = branchId
-      ? await prisma.$queryRaw<{
-          id: string; totalAmount: number; paymentType: string;
-          cashAmount: number | null; cardAmount: number | null;
-          saleType: string; createdAt: Date;
-          cashierName: string | null; legalEntityName: string | null; legalEntityPhone: string | null;
-        }[]>`
-          SELECT s.id, s."totalAmount",
-                 s."paymentType"::TEXT AS "paymentType",
-                 s."cashAmount", s."cardAmount",
-                 s."saleType"::TEXT AS "saleType",
-                 s."createdAt",
-                 u.name AS "cashierName",
-                 le.name AS "legalEntityName", le.phone AS "legalEntityPhone"
-          FROM "sales" s
-          LEFT JOIN "users" u ON u.id = s."cashierId"
-          LEFT JOIN "legal_entities" le ON le.id = s."legalEntityId"
-          WHERE s."branchId" = ${branchId}
-          ORDER BY s."createdAt" DESC
-          LIMIT ${limit} OFFSET ${offset}
-        `
-      : await prisma.$queryRaw<{
-          id: string; totalAmount: number; paymentType: string;
-          cashAmount: number | null; cardAmount: number | null;
-          saleType: string; createdAt: Date;
-          cashierName: string | null; legalEntityName: string | null; legalEntityPhone: string | null;
-        }[]>`
-          SELECT s.id, s."totalAmount",
-                 s."paymentType"::TEXT AS "paymentType",
-                 s."cashAmount", s."cardAmount",
-                 s."saleType"::TEXT AS "saleType",
-                 s."createdAt",
-                 u.name AS "cashierName",
-                 le.name AS "legalEntityName", le.phone AS "legalEntityPhone"
-          FROM "sales" s
-          LEFT JOIN "users" u ON u.id = s."cashierId"
-          LEFT JOIN "legal_entities" le ON le.id = s."legalEntityId"
-          ORDER BY s."createdAt" DESC
-          LIMIT ${limit} OFFSET ${offset}
-        `;
+    // FIX: sales list va count ni PARALLEL yuklash
+    const [sales, totalRows] = await Promise.all([
+      branchId
+        ? prisma.$queryRaw<{
+            id: string; totalAmount: number; paymentType: string;
+            cashAmount: number | null; cardAmount: number | null;
+            saleType: string; createdAt: Date;
+            cashierName: string | null; legalEntityName: string | null; legalEntityPhone: string | null;
+          }[]>`
+            SELECT s.id, s."totalAmount",
+                   s."paymentType"::TEXT AS "paymentType",
+                   s."cashAmount", s."cardAmount",
+                   s."saleType"::TEXT AS "saleType",
+                   s."createdAt",
+                   u.name AS "cashierName",
+                   le.name AS "legalEntityName", le.phone AS "legalEntityPhone"
+            FROM "sales" s
+            LEFT JOIN "users" u ON u.id = s."cashierId"
+            LEFT JOIN "legal_entities" le ON le.id = s."legalEntityId"
+            WHERE s."branchId" = ${branchId}
+            ORDER BY s."createdAt" DESC
+            LIMIT ${limit} OFFSET ${offset}
+          `
+        : prisma.$queryRaw<{
+            id: string; totalAmount: number; paymentType: string;
+            cashAmount: number | null; cardAmount: number | null;
+            saleType: string; createdAt: Date;
+            cashierName: string | null; legalEntityName: string | null; legalEntityPhone: string | null;
+          }[]>`
+            SELECT s.id, s."totalAmount",
+                   s."paymentType"::TEXT AS "paymentType",
+                   s."cashAmount", s."cardAmount",
+                   s."saleType"::TEXT AS "saleType",
+                   s."createdAt",
+                   u.name AS "cashierName",
+                   le.name AS "legalEntityName", le.phone AS "legalEntityPhone"
+            FROM "sales" s
+            LEFT JOIN "users" u ON u.id = s."cashierId"
+            LEFT JOIN "legal_entities" le ON le.id = s."legalEntityId"
+            ORDER BY s."createdAt" DESC
+            LIMIT ${limit} OFFSET ${offset}
+          `,
+      branchId
+        ? prisma.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS count FROM "sales" WHERE "branchId" = ${branchId}`
+        : prisma.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS count FROM "sales"`,
+    ]);
 
-    const totalRow = branchId
-      ? await prisma.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS count FROM "sales" WHERE "branchId" = ${branchId}`
-      : await prisma.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS count FROM "sales"`;
-
-    const total = Number(totalRow[0]?.count ?? 0);
-
-    // Har bir sotuv uchun itemlarni olish
+    const total = Number(totalRows[0]?.count ?? 0);
     const saleIds = sales.map(s => s.id);
     const items = saleIds.length > 0
       ? await prisma.$queryRaw<{ saleId: string; itemName: string; quantity: number; priceAtSale: number }[]>`

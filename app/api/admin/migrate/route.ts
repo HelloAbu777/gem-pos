@@ -272,9 +272,19 @@ export async function GET(request: NextRequest) {
     await run('products vatType to TEXT', `
       ALTER TABLE "products" ALTER COLUMN "vatType" TYPE TEXT USING "vatType"::TEXT
     `);
-    await run('products role column (users) to TEXT', `
+    await run('users role to TEXT', `
       ALTER TABLE "users" ALTER COLUMN "role" TYPE TEXT USING "role"::TEXT
     `);
+
+    // ── PERFORMANCE INDEXES ──────────────────────────────────────
+    await run('index products_branchId',          `CREATE INDEX IF NOT EXISTS "products_branchId_idx" ON "products"("branchId")`);
+    await run('index products_branchId_isPinned', `CREATE INDEX IF NOT EXISTS "products_branchId_isPinned_idx" ON "products"("branchId","isPinned")`);
+    await run('index sales_branchId',             `CREATE INDEX IF NOT EXISTS "sales_branchId_idx" ON "sales"("branchId")`);
+    await run('index sales_branchId_createdAt',   `CREATE INDEX IF NOT EXISTS "sales_branchId_createdAt_idx" ON "sales"("branchId","createdAt" DESC)`);
+    await run('index sales_createdAt',            `CREATE INDEX IF NOT EXISTS "sales_createdAt_idx" ON "sales"("createdAt" DESC)`);
+    await run('index sales_legalEntityId',        `CREATE INDEX IF NOT EXISTS "sales_legalEntityId_idx" ON "sales"("legalEntityId")`);
+    await run('index sale_items_saleId',          `CREATE INDEX IF NOT EXISTS "sale_items_saleId_idx" ON "sale_items"("saleId")`);
+    await run('index sale_items_productId',       `CREATE INDEX IF NOT EXISTS "sale_items_productId_idx" ON "sale_items"("productId")`);
 
     // ── 13. CATEGORIES / SUPPLIERS / LEGAL_ENTITIES — branchId ──
     await run('categories branchId column', `
