@@ -16,14 +16,10 @@ export async function GET(request: NextRequest) {
 
     const branchId = session?.branchId ?? null;
 
-    // Smena logikasi: har kun 08:00 dan keyingi kun 07:59 gacha
-    // Oy birinchi kuni: 1-kuni 08:00 → oxirgi kuni+1 07:59
-    const start = new Date(year, month - 1, 1, SHIFT_HOUR, 0, 0, 0);
-    const end   = new Date(year, month,     0, SHIFT_HOUR - 1, 59, 59, 999);
-    // end: keyingi oy 0-kuni = bu oyning oxirgi kuni + 08:00 gacha
-    // Ya'ni: oxirgi kuni 23:59 + ertangi kuni 07:59
-    // To'g'risi: keyingi oy 1-kuni 07:59
-    const endFixed = new Date(year, month, 1, SHIFT_HOUR - 1, 59, 59, 999);
+    // UTC+5 (O'zbekiston): 08:00 mahalliy = 03:00 UTC
+    const UTC_SHIFT = 3;
+    const start = new Date(Date.UTC(year, month - 1, 1, UTC_SHIFT, 0, 0, 0));
+    const endFixed = new Date(Date.UTC(year, month, 1, UTC_SHIFT - 1, 59, 59, 999));
 
     // Raw SQL — Prisma enum type crash dan himoya
     const salesRaw = branchId
@@ -116,18 +112,18 @@ export async function GET(request: NextRequest) {
     }
 
     for (const sale of salesRaw) {
-      const createdAt = new Date(sale.createdAt);
-      const hour = createdAt.getHours();
+      const createdAt  = new Date(sale.createdAt);
+      // UTC+5 mahalliy soatni hisoblash
+      const localHour  = (createdAt.getUTCHours() + 5) % 24;
+      let   localDay   = createdAt.getUTCDate();
+      // Agar UTC+5 da midnight o'tsa kun o'zgaradi
+      if (createdAt.getUTCHours() + 5 >= 24) localDay += 1;
 
-      // Smena: 00:00–07:59 → bu sotuvni oldingi kunga qo'shamiz
-      let day = createdAt.getDate();
-      if (hour < SHIFT_HOUR) {
+      // Smena: mahalliy 00:00–07:59 → oldingi kunga
+      let day = localDay;
+      if (localHour < SHIFT_HOUR) {
         day = day - 1;
-        if (day < 1) {
-          // Oldingi oyning oxirgi kuni — bu oydagi kun 1 dan oldin
-          // Biz faqat bu oy uchun hisoblaymiz, shuning uchun skip
-          continue;
-        }
+        if (day < 1) continue;
       }
 
       const entry = dailyMap[day];

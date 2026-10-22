@@ -24,13 +24,11 @@ export async function GET(request: NextRequest) {
     const saleType    = searchParams.get('saleType')    || 'all';
     const limit       = parseInt(searchParams.get('limit') || '500');
 
-    const today = new Date().toISOString().split('T')[0];
-    const start = new Date(from || today);
-    const end   = new Date(to   || today);
-    // Smena: 08:00 → ertangi kun 07:59
-    start.setHours(8, 0, 0, 0);
-    end.setDate(end.getDate() + 1);
-    end.setHours(7, 59, 59, 999);
+    const start = new Date(from + 'T00:00:00Z');
+    start.setUTCHours(3, 0, 0, 0); // UTC+5 08:00 = UTC 03:00
+    const end = new Date(to + 'T00:00:00Z');
+    end.setUTCDate(end.getUTCDate() + 1);
+    end.setUTCHours(2, 59, 59, 999); // UTC+5 07:59 = UTC 02:59
 
     // Filter qurish
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

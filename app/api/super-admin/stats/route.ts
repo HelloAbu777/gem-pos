@@ -19,11 +19,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'startDate va endDate kerak' }, { status: 400 });
     }
 
-    const start = new Date(startDate);
-    start.setHours(8, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setDate(end.getDate() + 1);
-    end.setHours(7, 59, 59, 999);
+    const start = new Date(startDate + 'T00:00:00Z');
+    start.setUTCHours(3, 0, 0, 0); // UTC+5 08:00 = UTC 03:00
+    const end = new Date(endDate + 'T00:00:00Z');
+    end.setUTCDate(end.getUTCDate() + 1);
+    end.setUTCHours(2, 59, 59, 999); // UTC+5 07:59 = UTC 02:59
 
     // Branch filter
     const branchFilter = branchId !== 'all' ? { branchId } : {};
