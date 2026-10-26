@@ -5,7 +5,7 @@ import {
   Search, ShoppingCart, Trash2, Plus, Minus,
   CreditCard, Banknote, Layers, CheckCircle,
   X, Clock, ChevronDown, ReceiptText, Package, UtensilsCrossed, Building2,
-  RefreshCw, Menu,
+  RefreshCw, Menu, RotateCcw,
 } from 'lucide-react';
 
 /* ── Types ───────────────────────────────────────────────────── */
@@ -340,7 +340,9 @@ export default function PosPage() {
   const [loadingHist,   setLoadingHist]   = useState(false);
   const [expandedId,    setExpandedId]    = useState<string | null>(null);
   const [scanFeedback,  setScanFeedback]  = useState<{ name: string; type: 'product' | 'dish' | 'notfound'; code: string } | null>(null);
-  const [showCart,      setShowCart]      = useState(false); /* Mobile cart drawer */
+  const [showCart,      setShowCart]      = useState(false);
+  const [refundId,      setRefundId]      = useState<string | null>(null);
+  const [refunding,     setRefunding]     = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -540,6 +542,20 @@ export default function PosPage() {
 
   /* FIX #6: onHide useCallback bilan stabillashtirilib, gereksiz re-render oldini olinadi */
   const hideScanFeedback = useCallback(() => setScanFeedback(null), []);
+
+  const handleRefund = useCallback(async (saleId: string) => {
+    setRefunding(true);
+    try {
+      const res = await fetch(`/api/sales/${saleId}/refund`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Xatolik'); return; }
+      setRefundId(null);
+      setExpandedId(null);
+      fetchHistory();
+      fetchAll(); // stock yangilanadi
+    } catch { alert('Xatolik yuz berdi'); }
+    finally { setRefunding(false); }
+  }, [fetchHistory, fetchAll]);
 
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.salePrice * i.qty, 0), [cart]);
   const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);
@@ -915,7 +931,7 @@ export default function PosPage() {
                             )}
                             {sale.saleItems.reduce((s, i) => s + i.quantity, 0)} ta element
                           </p>
-                          <p className="text-xs text-gray-400 truncate">
+                          <p className="tex t-xs text-gray-400 truncate">
                             {fmtTime(sale.createdAt)} · {sale.cashier?.name}
                             {sale.legalEntity && <span className="text-blue-500"> · {sale.legalEntity.name}</span>}
                           </p>
@@ -946,6 +962,14 @@ export default function PosPage() {
                           <div className="pt-2 border-t border-gray-200 flex justify-between font-bold text-sm">
                             <span>Jami</span><span>{fmt(sale.totalAmount)} so&apos;m</span>
                           </div>
+                          {/* Qaytarish tugmasi */}
+                          <button
+                            onClick={() => setRefundId(sale.id)}
+                            className="w-full mt-2 flex items-center justify-center gap-2 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Sotuvni bekor qilish
+                          </button>
                         </div>
                       )}
                     </div>
@@ -972,6 +996,44 @@ export default function PosPage() {
           sale={receipt}
           onClose={() => setReceipt(null)}
         />
+      )}
+      {/* Qaytarish tasdiqlash modali */}
+      {refundId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <RotateCcw className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Sotuvni bekor qilish</h3>
+                <p className="text-sm text-gray-500 mt-0.5">Mahsulotlar zaxiraga qaytariladi</p>
+              </div>
+            </div>
+            <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5 text-sm text-red-700">
+              Bu amalni qaytarib bo&apos;lmaydi. Sotuv o&apos;chiriladi va mahsulot miqdori tiklanadi.
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setRefundId(null)}
+                disabled={refunding}
+                className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={() => handleRefund(refundId)}
+                disabled={refunding}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {refunding
+                  ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>Bekor qilinmoqda...</>
+                  : <><RotateCcw className="w-4 h-4" />Tasdiqlash</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -96,13 +96,27 @@ export async function middleware(request: NextRequest) {
     }
 
     return NextResponse.next();
-  } catch {
-    // Token yaroqsiz yoki tugagan — cookie o'chir, login'ga yubor
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('from', pathname);
-    const response = NextResponse.redirect(loginUrl);
-    response.cookies.delete('session');
-    return response;
+  } catch (err) {
+    // Token xato turini aniqlaymiz
+    const errMsg = err instanceof Error ? err.message : String(err);
+    
+    // Faqat expire bo'lganda login'ga yuboramiz
+    // Boshqa xatolarda (JWSInvalid, encoding muammo) — o'tkazib yuboramiz
+    if (
+      errMsg.includes('expired') ||
+      errMsg.includes('JWTExpired') ||
+      errMsg.includes('exp claim')
+    ) {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('from', pathname);
+      const response = NextResponse.redirect(loginUrl);
+      response.cookies.delete('session');
+      return response;
+    }
+
+    // Boshqa JWT xatolari — next() bilan o'tkazib yuboramiz
+    // (session tekshirib bo'lmagan bo'lsa ham sahifaga kirishga ruxsat)
+    return NextResponse.next();
   }
 }
 
