@@ -54,10 +54,18 @@ export async function POST(request: NextRequest) {
     if (existing.length > 0) return NextResponse.json({ error: 'Bu kategoriya allaqachon mavjud' }, { status: 400 });
 
     const id = `cat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    await prisma.$executeRaw`
-      INSERT INTO "categories" ("id","name","branchId","createdAt","updatedAt")
-      VALUES (${id}, ${name.trim()}, ${branchId}, NOW(), NOW())
-    `;
+    try {
+      await prisma.$executeRaw`
+        INSERT INTO "categories" ("id","name","branchId","createdAt","updatedAt")
+        VALUES (${id}, ${name.trim()}, ${branchId}, NOW(), NOW())
+      `;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('unique') || msg.includes('duplicate') || msg.includes('already exists')) {
+        return NextResponse.json({ error: 'Bu kategoriya allaqachon mavjud' }, { status: 400 });
+      }
+      throw e;
+    }
 
     return NextResponse.json({ id, name: name.trim(), branchId, _count: { products: 0 } }, { status: 201 });
   } catch (error) {
