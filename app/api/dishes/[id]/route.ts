@@ -15,7 +15,9 @@ export async function PUT(
 
     if (barcode?.trim()) {
       const ex = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "dishes" WHERE barcode = ${barcode.trim()} AND id != ${id} LIMIT 1
+        SELECT id FROM "dishes"
+        WHERE barcode = ${barcode.trim()}
+        AND id != ${id} LIMIT 1
       `;
       if (ex.length > 0) return NextResponse.json({ error: 'Bu barcode allaqachon mavjud' }, { status: 400 });
     }

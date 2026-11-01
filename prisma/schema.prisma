@@ -72,7 +72,7 @@ model Supplier {
 model Product {
   id             String      @id @default(cuid())
   name           String
-  barcode        String?     @unique
+  barcode        String?
   unit           String      @default("dona")
   quantity       Float       @default(0)
   minQuantity    Float       @default(10)
@@ -92,9 +92,9 @@ model Product {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  @@unique([barcode, branchId])
   @@index([branchId])
   @@index([branchId, isPinned])
-  @@index([barcode])
   @@map("products")
 }
 

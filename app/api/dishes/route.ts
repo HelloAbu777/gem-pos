@@ -53,7 +53,9 @@ export async function POST(request: NextRequest) {
 
     if (barcode?.trim()) {
       const existing = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "dishes" WHERE barcode = ${barcode.trim()} LIMIT 1
+        SELECT id FROM "dishes"
+        WHERE barcode = ${barcode.trim()} AND "branchId" = ${branchId}
+        LIMIT 1
       `;
       if (existing.length > 0) return NextResponse.json({ error: 'Bu barcode allaqachon mavjud' }, { status: 400 });
     }

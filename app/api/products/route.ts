@@ -80,10 +80,12 @@ export async function POST(request: NextRequest) {
     if (data.purchasePrice === '' || data.purchasePrice == null)
       return NextResponse.json({ error: 'Kelish narxi kiritilmagan' },  { status: 400 });
 
-    // Barcode tekshirish
+    // Barcode tekshirish — faqat shu filial ichida unique
     if (data.barcode?.trim()) {
       const exists = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "products" WHERE barcode = ${data.barcode.trim()} LIMIT 1
+        SELECT id FROM "products"
+        WHERE barcode = ${data.barcode.trim()} AND "branchId" = ${branchId}
+        LIMIT 1
       `;
       if (exists.length > 0) return NextResponse.json({ error: 'Bu shtrix kod allaqachon mavjud' }, { status: 400 });
     }

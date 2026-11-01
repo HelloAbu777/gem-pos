@@ -268,6 +268,12 @@ export async function GET(request: NextRequest) {
         SET "role"='SUPER_ADMIN', "branchId"=NULL, "updatedAt"=NOW()
     `);
 
+    // ── BARCODE INDEX FIX ────────────────────────────────────────
+    // Eski global unique barcode indexni o'chirib, (barcode, branchId) qo'yamiz
+    await run('drop products_barcode_key index',      `DROP INDEX IF EXISTS "products_barcode_key"`);
+    await run('drop products_barcode_key constraint', `ALTER TABLE "products" DROP CONSTRAINT IF EXISTS "products_barcode_key"`);
+    await run('create products barcode+branchId unique', `CREATE UNIQUE INDEX IF NOT EXISTS "products_barcode_branchId_key" ON "products"("barcode","branchId") WHERE barcode IS NOT NULL`);
+
     // ── CATEGORIES UNIQUE INDEX FIX ─────────────────────────────
     // Eski faqat name bo'yicha unique index — turli filiallar bir xil nom qo'sha olmaydi
     // Buni o'chirib, (name, branchId) juftligi unique bo'lgan yangi index qo'yamiz

@@ -22,11 +22,12 @@ export async function PUT(
     if (!data.supplierId)
       return NextResponse.json({ error: "Ta'minotchi tanlanmagan" }, { status: 400 });
 
-    // Barcode unique tekshirish
+    // Barcode unique tekshirish — faqat shu filial ichida
     if (data.barcode?.trim()) {
       const ex = await prisma.$queryRaw<{ id: string }[]>`
         SELECT id FROM "products"
-        WHERE barcode = ${data.barcode.trim()} AND id != ${id}
+        WHERE barcode = ${data.barcode.trim()} AND "branchId" = (SELECT "branchId" FROM "products" WHERE id = ${id})
+        AND id != ${id}
         LIMIT 1
       `;
       if (ex.length > 0)
