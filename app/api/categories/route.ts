@@ -45,10 +45,10 @@ export async function POST(request: NextRequest) {
 
     if (!name?.trim()) return NextResponse.json({ error: 'Kategoriya nomi kiritilmagan' }, { status: 400 });
 
-    // Faqat shu filialdagi kategoriyalar ichida tekshirish
+    // Faqat shu filial ichida tekshirish (branchId bilan)
     const existing = await prisma.$queryRaw<{ id: string }[]>`
       SELECT id FROM "categories"
-      WHERE name = ${name.trim()} AND "branchId" = ${branchId}
+      WHERE LOWER(name) = LOWER(${name.trim()}) AND "branchId" = ${branchId}
       LIMIT 1
     `;
     if (existing.length > 0) return NextResponse.json({ error: 'Bu kategoriya allaqachon mavjud' }, { status: 400 });
@@ -62,9 +62,26 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       if (msg.includes('unique') || msg.includes('duplicate') || msg.includes('already exists')) {
-        return NextResponse.json({ error: 'Bu kategoriya allaqachon mavjud' }, { status: 400 });
+        // Eski index (faqat name) xato bermoqda — uni o'chirib, to'g'risini qo'yamiz va qayta urinamiz
+        try {
+          await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "categories_name_key"`);
+          await prisma.$executeRawUnsafe(`ALTER TABLE "categories" DROP CONSTRAINT IF EXISTS "categories_name_key"`);
+          await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "categories_name_branchId_key" ON "categories"("name","branchId")`);
+          // Qayta urinish
+          await prisma.$executeRaw`
+            INSERT INTO "categories" ("id","name","branchId","createdAt","updatedAt")
+            VALUES (${id}, ${name.trim()}, ${branchId}, NOW(), NOW())
+          `;
+        } catch (e2) {
+          const msg2 = e2 instanceof Error ? e2.message : '';
+          if (msg2.includes('unique') || msg2.includes('duplicate')) {
+            return NextResponse.json({ error: 'Bu kategoriya allaqachon mavjud' }, { status: 400 });
+          }
+          throw e2;
+        }
+      } else {
+        throw e;
       }
-      throw e;
     }
 
     return NextResponse.json({ id, name: name.trim(), branchId, _count: { products: 0 } }, { status: 201 });
