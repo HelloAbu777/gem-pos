@@ -268,6 +268,13 @@ export async function GET(request: NextRequest) {
         SET "role"='SUPER_ADMIN', "branchId"=NULL, "updatedAt"=NOW()
     `);
 
+    // ── CATEGORIES UNIQUE INDEX FIX ─────────────────────────────
+    // Eski faqat name bo'yicha unique index — turli filiallar bir xil nom qo'sha olmaydi
+    // Buni o'chirib, (name, branchId) juftligi unique bo'lgan yangi index qo'yamiz
+    await run('drop old categories_name_key index',    `DROP INDEX IF EXISTS "categories_name_key"`);
+    await run('drop old categories_name_key constraint', `ALTER TABLE "categories" DROP CONSTRAINT IF EXISTS "categories_name_key"`);
+    await run('create categories (name, branchId) unique', `CREATE UNIQUE INDEX IF NOT EXISTS "categories_name_branchId_key" ON "categories"("name","branchId")`);
+
     // ── ENUM USTUNLARINI TEXT GA O'TKAZISH ──────────────────────
     await run('products vatType to TEXT', `
       ALTER TABLE "products" ALTER COLUMN "vatType" TYPE TEXT USING "vatType"::TEXT
