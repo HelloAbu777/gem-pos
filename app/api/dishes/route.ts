@@ -62,13 +62,35 @@ export async function POST(request: NextRequest) {
 
     const id = `dish_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-    await prisma.$executeRaw`
-      INSERT INTO "dishes" ("id","name","price","costPrice","barcode","isActive","branchId","createdAt","updatedAt")
-      VALUES (
-        ${id}, ${name.trim()}, ${Number(price)}, ${Number(costPrice) || 0},
-        ${barcode?.trim() || null}, true, ${branchId}, NOW(), NOW()
-      )
-    `;
+    const doInsert = async () => {
+      await prisma.$executeRaw`
+        INSERT INTO "dishes" ("id","name","price","costPrice","barcode","isActive","branchId","createdAt","updatedAt")
+        VALUES (
+          ${id}, ${name.trim()}, ${Number(price)}, ${Number(costPrice) || 0},
+          ${barcode?.trim() || null}, true, ${branchId}, NOW(), NOW()
+        )
+      `;
+    };
+
+    try {
+      await doInsert();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('already exists') || msg.includes('unique') || msg.includes('duplicate')) {
+        // Eski global unique index — o'chirib, (barcode, branchId) qo'yamiz
+        try {
+          await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "dishes_barcode_key"`);
+          await prisma.$executeRawUnsafe(`ALTER TABLE "dishes" DROP CONSTRAINT IF EXISTS "dishes_barcode_key"`);
+          await prisma.$executeRawUnsafe(
+            `CREATE UNIQUE INDEX IF NOT EXISTS "dishes_barcode_branchId_key"
+             ON "dishes"("barcode","branchId") WHERE barcode IS NOT NULL`
+          );
+        } catch { /* silent */ }
+        await doInsert();
+      } else {
+        throw e;
+      }
+    }
 
     const created = await prisma.$queryRaw<object[]>`
       SELECT * FROM "dishes" WHERE id = ${id}
