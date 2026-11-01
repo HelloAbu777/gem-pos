@@ -118,25 +118,64 @@ export async function POST(request: NextRequest) {
     const pinnedVal   = data.isPinned === true;
 
     // $executeRawUnsafe — vatType enum cast uchun
-    await prisma.$executeRawUnsafe(`
-      INSERT INTO "products" (
-        "id","name","barcode","unit","quantity","minQuantity",
-        "purchasePrice","salePrice","margin","vatType",
-        "expiryDate","isPinned","categoryId","supplierId","branchId",
-        "createdAt","updatedAt"
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        $10::"VATType",
-        $11, $12, $13, $14, $15,
-        NOW(), NOW()
-      )
-    `,
-      id, data.name.trim(), barcodeVal, unit,
-      qtyVal, minQtyVal, purchaseVal, saleVal, margin,
-      vatType,
-      expiryDate ? new Date(expiryDate) : null,
-      pinnedVal, data.categoryId, data.supplierId, branchId
-    );
+    try {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "products" (
+          "id","name","barcode","unit","quantity","minQuantity",
+          "purchasePrice","salePrice","margin","vatType",
+          "expiryDate","isPinned","categoryId","supplierId","branchId",
+          "createdAt","updatedAt"
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9,
+          $10::"VATType",
+          $11, $12, $13, $14, $15,
+          NOW(), NOW()
+        )
+      `,
+        id, data.name.trim(), barcodeVal, unit,
+        qtyVal, minQtyVal, purchaseVal, saleVal, margin,
+        vatType,
+        expiryDate ? new Date(expiryDate) : null,
+        pinnedVal, data.categoryId, data.supplierId, branchId
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      // Eski global unique index xato bermoqda — indexni tuzatib qayta urinamiz
+      if (msg.includes('already exists') || msg.includes('unique') || msg.includes('duplicate')) {
+        // Eski barcode global indexni o'chirib, (barcode, branchId) indexni qo'yamiz
+        try {
+          await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "products_barcode_key"`);
+          await prisma.$executeRawUnsafe(`ALTER TABLE "products" DROP CONSTRAINT IF EXISTS "products_barcode_key"`);
+          await prisma.$executeRawUnsafe(
+            `CREATE UNIQUE INDEX IF NOT EXISTS "products_barcode_branchId_key"
+             ON "products"("barcode","branchId") WHERE barcode IS NOT NULL`
+          );
+        } catch { /* index allaqachon yo'q bo'lishi mumkin */ }
+
+        // Qayta urinish
+        await prisma.$executeRawUnsafe(`
+          INSERT INTO "products" (
+            "id","name","barcode","unit","quantity","minQuantity",
+            "purchasePrice","salePrice","margin","vatType",
+            "expiryDate","isPinned","categoryId","supplierId","branchId",
+            "createdAt","updatedAt"
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9,
+            $10::"VATType",
+            $11, $12, $13, $14, $15,
+            NOW(), NOW()
+          )
+        `,
+          id, data.name.trim(), barcodeVal, unit,
+          qtyVal, minQtyVal, purchaseVal, saleVal, margin,
+          vatType,
+          expiryDate ? new Date(expiryDate) : null,
+          pinnedVal, data.categoryId, data.supplierId, branchId
+        );
+      } else {
+        throw e;
+      }
+    }
 
     const created = await prisma.$queryRaw<{ id: string; name: string }[]>`
       SELECT p.id, p.name, p.barcode, p.unit, p.quantity, p."minQuantity",
